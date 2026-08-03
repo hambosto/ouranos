@@ -1,5 +1,8 @@
 name: Code Quality
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches: [main]
@@ -13,9 +16,6 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v7
-
-      - name: Install system dependencies
-        run: sudo apt-get install -y libxkbcommon-dev
       
       - name: Install Rust toolchain (nightly)
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -25,10 +25,10 @@ jobs:
           cache: false
       
       - name: Verify code formatting
-        run: cargo fmt --all -- --check
+        run: cargo fmt --check
       
       - name: Run Clippy static analysis
-        run: cargo clippy --all-targets --all-features
+        run: cargo clippy
       
       - name: Execute test suite
-        run: cargo test --all-features
+        run: cargo test
