@@ -28,8 +28,6 @@ pub(crate) fn run(config: Config) -> Result<()> {
     tracing::info!(display = std::env::var("WAYLAND_DISPLAY").unwrap_or_default(), "wayland connection established");
 
     let (mut event_loop, mut state, queue_handle) = setup(connection).context("failed to setup wayland")?;
-    tracing::info!(protocol = "zwlr_layer_shell_v1", "layer shell protocols ready");
-
     state.apply_wallpaper(config, &queue_handle)?;
 
     tracing::info!(pid = std::process::id(), "wallpaper daemon is running");

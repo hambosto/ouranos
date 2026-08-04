@@ -29,7 +29,9 @@ impl OutputHandler for State {
 
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlOutput) {}
 
-    fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlOutput) {}
+    fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, wl_output: WlOutput) {
+        self.handle_output_destroyed(&wl_output);
+    }
 }
 
 impl CompositorHandler for State {
