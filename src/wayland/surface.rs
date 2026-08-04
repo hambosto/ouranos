@@ -7,11 +7,10 @@ use smithay_client_toolkit::shm::slot::SlotPool;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::Format;
 
+use super::state::State;
 use crate::config::Config;
 use crate::image::Image;
 use crate::transition::Transition;
-
-use super::state::State;
 
 pub(super) struct Surface {
     pub(super) layer_surface: LayerSurface,

@@ -6,8 +6,7 @@ use anyhow::{Context, Result};
 use smithay_client_toolkit::reexports::calloop::EventLoop;
 use smithay_client_toolkit::reexports::calloop_wayland_source::WaylandSource;
 use state::State;
-use wayland_client::Connection;
-use wayland_client::QueueHandle;
+use wayland_client::{Connection, QueueHandle};
 
 use crate::config::Config;
 
