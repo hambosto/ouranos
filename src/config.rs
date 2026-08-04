@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use fast_image_resize::FilterType;
@@ -11,21 +11,15 @@ const CONFIG_FILE: &str = "config.toml";
 
 impl Config {
     pub(crate) fn load() -> Result<Self> {
-        let xdg_dirs = BaseDirectories::with_prefix(CONFIG_PREFIX);
-        let config_file = xdg_dirs.find_config_file(CONFIG_FILE).context("failed to find config file")?;
-        tracing::info!(path = %config_file.display(), prefix = CONFIG_PREFIX, "reading configuration file");
+        let path = BaseDirectories::with_prefix(CONFIG_PREFIX).find_config_file(CONFIG_FILE).context("failed to find config file")?;
+        tracing::info!(path = %path.display(), "reading configuration");
 
-        Self::load_from_file(&config_file)
-    }
-
-    fn load_from_file(path: &Path) -> Result<Self> {
-        let content = std::fs::read_to_string(path).context("cannot read from config file")?;
-        let config: Self = toml::from_str(&content).context("cannot parse config file")?;
-        Ok(config)
+        let content = std::fs::read_to_string(&path).context("cannot read config")?;
+        toml::from_str(&content).context("cannot parse config")
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     pub(crate) image: ImageConfig,
@@ -35,28 +29,13 @@ pub(crate) struct Config {
     pub(crate) resize: ResizeConfig,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ImageConfig {
     pub(crate) path: PathBuf,
 }
 
-#[derive(Deserialize, Debug, Clone)]
-#[serde(default, deny_unknown_fields)]
-pub(crate) struct ResizeConfig {
-    pub(crate) strategy: ResizeStrategy,
-    pub(crate) crop_gravity: CropGravity,
-    pub(crate) fill_color: [u8; 4],
-    pub(crate) filter: Filter,
-}
-
-impl Default for ResizeConfig {
-    fn default() -> Self {
-        Self { strategy: ResizeStrategy::Crop, crop_gravity: CropGravity::Center, fill_color: [0x00, 0x00, 0x00, 0xFF], filter: Filter::Lanczos3 }
-    }
-}
-
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct TransitionConfig {
     pub(crate) transition_type: TransitionType,
@@ -84,8 +63,8 @@ impl Default for TransitionConfig {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct WipeConfig {
     pub(crate) direction: f32,
 }
@@ -96,8 +75,8 @@ impl Default for WipeConfig {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct DiscConfig {
     pub(crate) center_x: f32,
     pub(crate) center_y: f32,
@@ -109,8 +88,8 @@ impl Default for DiscConfig {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct StripesConfig {
     pub(crate) stripe_count: f32,
     pub(crate) angle: f32,
@@ -122,8 +101,8 @@ impl Default for StripesConfig {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct HoneycombConfig {
     pub(crate) cell_size: f32,
     pub(crate) center_x: f32,
@@ -136,7 +115,22 @@ impl Default for HoneycombConfig {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct ResizeConfig {
+    pub(crate) strategy: ResizeStrategy,
+    pub(crate) crop_gravity: CropGravity,
+    pub(crate) fill_color: [u8; 4],
+    pub(crate) filter: Filter,
+}
+
+impl Default for ResizeConfig {
+    fn default() -> Self {
+        Self { strategy: ResizeStrategy::Crop, crop_gravity: CropGravity::Center, fill_color: [0, 0, 0, 255], filter: Filter::Lanczos3 }
+    }
+}
+
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ResizeStrategy {
     No,
@@ -145,7 +139,7 @@ pub(crate) enum ResizeStrategy {
     Stretch,
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CropGravity {
     TopLeft,
@@ -175,7 +169,7 @@ impl CropGravity {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Filter {
     Nearest,
@@ -197,7 +191,7 @@ impl From<Filter> for FilterType {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TransitionType {
     None,
