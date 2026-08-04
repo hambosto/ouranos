@@ -5,28 +5,26 @@
 path = "/absolute/path/to/wallpaper.png"
 
 [transition]
-transition_type = "simple"
-duration = 3.0
-fps = 30
-transition_color = "#989264"
+transition_type = "fade"
+duration = 1.5
+edge_smoothness = 0.3
+transition_color = "#000000"
 
-[transition.fade]
-bezier = [0.54, 0.0, 0.34, 0.99]
+[transition.wipe]
+direction = 0.0
 
-[transition.radial]
-step = 90
-bezier = [0.54, 0.0, 0.34, 0.99]
-invert_y = false
+[transition.disc]
+center_x = 0.5
+center_y = 0.5
 
-[transition.radial.pos]
-x = 0.5
-y = 0.5
+[transition.stripes]
+stripe_count = 12.0
+angle = 30.0
 
-[transition.wave]
-step = 90
-bezier = [0.54, 0.0, 0.34, 0.99]
-angle = 45.0
-wave = [20.0, 20.0]
+[transition.honeycomb]
+cell_size = 0.04
+center_x = 0.5
+center_y = 0.5
 
 [resize]
 strategy = "crop"
