@@ -8,6 +8,7 @@ path = "/absolute/path/to/wallpaper.png"
 transition_type = "simple"
 duration = 3.0
 fps = 30
+transition_color = "#989264"
 
 [transition.fade]
 bezier = [0.54, 0.0, 0.34, 0.99]

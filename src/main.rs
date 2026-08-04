@@ -17,8 +17,16 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt().with_file(true).with_line_number(true).init();
 
     let version = option_env!("WALLPAPER_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
-    tracing::info!(version, "starting wallpaper-rs");
+    tracing::info!(version, "wallpaper-rs starting");
 
     let config = Config::load().context("failed to load config")?;
-    wayland::run(&config).context("failed to run wayland wallpaper setter")
+    tracing::info!(
+        image = %config.image.path.display(),
+        transition = ?config.transition.transition_type,
+        resize = ?config.resize.strategy,
+        duration = config.transition.duration,
+        "configuration loaded"
+    );
+
+    wayland::run(config).context("failed to run wayland wallpaper setter")
 }

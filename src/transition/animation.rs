@@ -1,7 +1,4 @@
-use animato_core::Easing;
-
 pub(crate) struct AnimationSequence {
-    easing: Easing,
     start_val: f32,
     end_val: f32,
     start_time: f64,
@@ -10,21 +7,15 @@ pub(crate) struct AnimationSequence {
 }
 
 impl AnimationSequence {
-    pub(crate) fn new(bezier: (f32, f32, f32, f32), duration: f32, start_val: f32, end_val: f32, start_time: f64) -> Self {
-        let easing = Easing::CubicBezier(bezier.0, bezier.1, bezier.2, bezier.3);
+    pub(crate) fn new(duration: f32, start_val: f32, end_val: f32, start_time: f64) -> Self {
         let end_time = start_time + duration as f64;
-        Self { easing, start_val, end_val, start_time, end_time, time: 0.0 }
+        Self { start_val, end_val, start_time, end_time, time: 0.0 }
     }
 
     pub(crate) fn now(&self) -> f32 {
-        if self.time <= self.start_time {
-            return self.start_val;
-        }
-        if self.time >= self.end_time {
-            return self.end_val;
-        }
-        let t = ((self.time - self.start_time) / (self.end_time - self.start_time)) as f32;
-        let eased = self.easing.apply(t);
+        let duration = self.end_time - self.start_time;
+        let t = if duration <= 0.0 { 1.0 } else { ((self.time - self.start_time) / duration).clamp(0.0, 1.0) as f32 };
+        let eased = if t < 0.5 { 4.0 * t * t * t } else { 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0 };
         (self.end_val - self.start_val).mul_add(eased, self.start_val)
     }
 

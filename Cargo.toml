@@ -8,13 +8,13 @@ homepage = "https://github.com/hambosto/wallpaper-rs"
 repository = "https://github.com/hambosto/wallpaper-rs"
 
 [dependencies]
-animato-core           = "1.7.2"
 anyhow                 = "1.0.104"
 fast_image_resize      = "6.1.0"
 garb                   = "0.2.8"
+hex_color              = { version = "3.0.0", features = ["serde"] }
 image                  = "0.25.10"
+rand                   = "0.10.2"
 serde                  = { version = "1.0.229", features = ["derive"] }
-smart-default          = "0.7.1"
 smithay-client-toolkit = "0.21.1"
 toml                   = "1.1.4"
 tracing                = "0.1.44"
@@ -33,4 +33,3 @@ panic         = "abort"
 strip         = true
 
 [lints.clippy]
-chunks_exact_to_as_chunks = "allow"

@@ -1,33 +1,95 @@
 pub(crate) mod animation;
+mod disc;
 mod fade;
-mod radial;
-mod wave;
+mod honeycomb;
+mod stripes;
+mod wipe;
+mod zoom;
 
 use std::time::Instant;
 
+use disc::Disc;
 use fade::Fade;
-use radial::{Radial, RadialMode};
-use wave::Wave;
+use honeycomb::Honeycomb;
+use stripes::Stripes;
+use wipe::Wipe;
+use zoom::Zoom;
 
 use crate::config::{TransitionConfig, TransitionType};
+
+fn random_float(min: f32, max: f32) -> f32 {
+    min + (max - min) * rand::random::<f32>()
+}
+
+pub(crate) struct TransitionParams {
+    pub(crate) direction: f32,
+    pub(crate) center_x: f32,
+    pub(crate) center_y: f32,
+    pub(crate) stripe_count: f32,
+    pub(crate) angle: f32,
+    pub(crate) cell_size: f32,
+    pub(crate) smoothness: f32,
+}
+
+fn randomize_params(transition_type: &TransitionType, config: &TransitionConfig, _aspect_ratio: f32) -> TransitionParams {
+    let mut params = TransitionParams {
+        direction: config.wipe.direction,
+        center_x: config.disc.center_x,
+        center_y: config.disc.center_y,
+        stripe_count: config.stripes.stripe_count,
+        angle: config.stripes.angle,
+        cell_size: config.honeycomb.cell_size,
+        smoothness: config.edge_smoothness,
+    };
+
+    match transition_type {
+        TransitionType::Wipe => {
+            params.direction = random_float(0.0, 4.0).floor();
+        }
+        TransitionType::Disc => {
+            params.center_x = random_float(0.2, 0.8);
+            params.center_y = random_float(0.2, 0.8);
+        }
+        TransitionType::Stripes => {
+            params.stripe_count = random_float(4.0, 24.0).round();
+            params.angle = random_float(0.0, 360.0);
+        }
+        TransitionType::Honeycomb => {
+            params.cell_size = random_float(0.02, 0.06);
+            params.center_x = random_float(0.2, 0.8);
+            params.center_y = random_float(0.2, 0.8);
+        }
+        _ => {}
+    }
+
+    params
+}
 
 enum Effect {
     None,
     Cleanup { step: u8 },
     Fade(Fade),
-    Radial(Radial),
-    Wave(Wave),
+    Wipe(Wipe),
+    Disc(Disc),
+    Stripes(Stripes),
+    Zoom(Zoom),
+    Honeycomb(Honeycomb),
 }
 
 impl Effect {
     fn new(config: &TransitionConfig, dimensions: (u32, u32)) -> Self {
+        let aspect_ratio = dimensions.0 as f32 / dimensions.1 as f32;
+        let params = randomize_params(&config.transition_type, config, aspect_ratio);
+
         match config.transition_type {
             TransitionType::None => Self::None,
             TransitionType::Simple => Self::Cleanup { step: 2 },
-            TransitionType::Fade => Self::Fade(Fade::new(config.fade.bezier, config.duration)),
-            TransitionType::Grow => Self::Radial(Radial::new(config.radial.bezier, config.duration, config.radial.step, config.radial.pos, config.radial.invert_y, dimensions, RadialMode::Grow)),
-            TransitionType::Outer => Self::Radial(Radial::new(config.radial.bezier, config.duration, config.radial.step, config.radial.pos, config.radial.invert_y, dimensions, RadialMode::Outer)),
-            TransitionType::Wipe | TransitionType::Wave => Self::Wave(Wave::new(config.wave.bezier, config.duration, config.wave.step, config.wave.angle, config.wave.wave, dimensions)),
+            TransitionType::Fade => Self::Fade(Fade::new(config.duration)),
+            TransitionType::Wipe => Self::Wipe(Wipe::new(config.duration, params.direction, params.smoothness, dimensions)),
+            TransitionType::Disc => Self::Disc(Disc::new(config.duration, params.center_x, params.center_y, params.smoothness, dimensions)),
+            TransitionType::Stripes => Self::Stripes(Stripes::new(config.duration, params.stripe_count, params.angle, params.smoothness, dimensions)),
+            TransitionType::Zoom => Self::Zoom(Zoom::new(config.duration, dimensions)),
+            TransitionType::Honeycomb => Self::Honeycomb(Honeycomb::new(config.duration, params.cell_size, params.center_x, params.center_y, params.smoothness, dimensions)),
         }
     }
 
@@ -53,19 +115,37 @@ impl Effect {
                 if !e.run(canvas, target, elapsed) {
                     return false;
                 }
-                *self = Self::Cleanup { step: e.alpha as u8 / 4 + 4 };
+                *self = Self::Cleanup { step: 4 };
             }
-            Self::Radial(e) => {
+            Self::Wipe(e) => {
                 if !e.run(canvas, target, elapsed) {
                     return false;
                 }
-                *self = Self::Cleanup { step: e.step / 4 + 4 };
+                *self = Self::Cleanup { step: 4 };
             }
-            Self::Wave(e) => {
+            Self::Disc(e) => {
                 if !e.run(canvas, target, elapsed) {
                     return false;
                 }
-                *self = Self::Cleanup { step: e.step / 4 + 4 };
+                *self = Self::Cleanup { step: 4 };
+            }
+            Self::Stripes(e) => {
+                if !e.run(canvas, target, elapsed) {
+                    return false;
+                }
+                *self = Self::Cleanup { step: 4 };
+            }
+            Self::Zoom(e) => {
+                if !e.run(canvas, target, elapsed) {
+                    return false;
+                }
+                *self = Self::Cleanup { step: 4 };
+            }
+            Self::Honeycomb(e) => {
+                if !e.run(canvas, target, elapsed) {
+                    return false;
+                }
+                *self = Self::Cleanup { step: 4 };
             }
         }
         false
@@ -76,8 +156,6 @@ pub(crate) struct Transition {
     effect: Option<Effect>,
     target: Vec<u8>,
     start: Instant,
-    width: u32,
-    height: u32,
 }
 
 impl Transition {
@@ -85,18 +163,13 @@ impl Transition {
         tracing::info!(
             transition_type = ?config.transition_type,
             duration = config.duration,
-            fps = config.fps,
-            "creating transition",
+            width = dimensions.0,
+            height = dimensions.1,
+            pixels = dimensions.0 * dimensions.1,
+            smoothness = config.edge_smoothness,
+            "applying transition effect"
         );
-        Self { effect: Some(Effect::new(config, dimensions)), target, start: Instant::now(), width: dimensions.0, height: dimensions.1 }
-    }
-
-    pub(crate) fn is_done(&self) -> bool {
-        self.effect.is_none()
-    }
-
-    pub(crate) fn dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
+        Self { effect: Some(Effect::new(config, dimensions)), target, start: Instant::now() }
     }
 
     pub(crate) fn frame(&mut self, canvas: &mut [u8]) -> bool {
@@ -107,8 +180,9 @@ impl Transition {
         let elapsed = self.start.elapsed().as_secs_f64();
         let done = effect.execute(canvas, &self.target, elapsed);
         if done {
-            tracing::info!("transition finished at {elapsed:.2}s");
+            tracing::info!(elapsed_secs = elapsed, duration = elapsed, "transition finished");
             self.effect = None;
+            self.target = Vec::new();
         }
         done
     }

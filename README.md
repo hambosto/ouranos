@@ -62,7 +62,7 @@ Use with Home Manager:
         # transition_type: "none" | "simple" | "fade" | "grow" | "outer" | "wipe" | "wave"
         transition_type = "simple";
         duration = 3.0;
-        fps = 30;
+        transition_color = "#989264";
 
         fade.bezier = [0.54 0.0 0.34 0.99];
 
@@ -132,7 +132,7 @@ path = "/absolute/path/to/wallpaper.png"
 [transition]
 transition_type = "fade"
 duration = 3.0
-fps = 30
+transition_color = "#989264"
 
 [resize]
 strategy = "crop"
@@ -205,14 +205,14 @@ Controls the visual effect when switching wallpapers. The entire section default
 [transition]
 transition_type = "fade"
 duration = 3.0
-fps = 30
+transition_color = "#989264"
 ```
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `transition_type` | string | `simple` | Transition effect (see below) |
 | `duration` | float | `3.0` | Duration of the transition in seconds |
-| `fps` | integer | `30` | Target frames per second for the animation |
+| `transition_color` | string (hex) | `"#000000"` | Starting color for transitions (`#RRGGBB` or `#RRGGBBAA`) |
 
 **`transition_type` values:**
 
@@ -360,7 +360,7 @@ path = "/home/user/wallpapers/mountains.jpg"
 [transition]
 transition_type = "wave"
 duration = 5.0
-fps = 60
+transition_color = "#989264"
 
 [transition.wave]
 step = 120
@@ -391,7 +391,7 @@ path = "/home/user/wallpapers/wallpaper.png"
 3. Enumerates outputs
 4. Creates a background layer surface per output
 5. Renders image to SHM buffers with configured resize strategy
-6. Commits surfaces (with transition from black on first load)
+6. Commits surfaces (with transition from configured color on first load)
 7. Enters event loop driven by calloop timers
 
 ## Troubleshooting
