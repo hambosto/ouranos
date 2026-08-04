@@ -31,7 +31,6 @@ impl State {
         let layer_shell = LayerShell::bind(global_list, queue_handle).context("zwlr_layer_shell_v1 not available")?;
         let shm = Shm::bind(global_list, queue_handle).context("wl_shm not available")?;
 
-        tracing::info!(compositor = true, layer_shell = true, shm = true, "wayland globals bound");
         Ok(Self { registry_state, output_state, compositor, layer_shell, shm, surfaces: Vec::new(), config: None })
     }
 
@@ -42,6 +41,7 @@ impl State {
             };
 
             let name = info.name.as_deref().unwrap_or("unknown");
+            let description = info.description.as_deref().unwrap_or("unknown");
             let Some((width, height)) = info
                 .logical_size
                 .filter(|(w, h)| *w > 0 && *h > 0)
@@ -58,7 +58,7 @@ impl State {
             layer_surface.set_size(0, 0);
             layer_surface.commit();
 
-            tracing::info!(name, width, height, "monitor detected, creating wallpaper surface");
+            tracing::info!(name, description, width, height, "monitor detected, creating wallpaper surface");
             self.surfaces.push(Surface::new(layer_surface, width.cast_unsigned(), height.cast_unsigned()));
         }
     }
@@ -82,7 +82,7 @@ impl State {
             return Ok(());
         };
 
-        let pending: Vec<_> = self.surfaces.iter().filter(|s| s.configured && !s.rendered).collect();
+        let pending: Vec<&Surface> = self.surfaces.iter().filter(|s| s.configured && !s.rendered).collect();
         if pending.is_empty() {
             return Ok(());
         }
