@@ -11,4 +11,4 @@ ConditionEnvironment=WAYLAND_DISPLAY
 Description=A minimal wallpaper daemon for Wayland, written in Rust.
 Documentation=https://github.com/hambosto/wallpaper-rs
 PartOf=graphical-session.target
-X-Restart-Triggers=/nix/store/d3bm0v9la9jn59182ncv1nwxp2hyfc4f-wallpaper-rs-config.toml
+X-Restart-Triggers=%h/.config/wallpaper-rs/config.toml

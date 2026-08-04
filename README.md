@@ -1,53 +1,34 @@
-## What it does
+# wallpaper-rs
 
-Sets a wallpaper image on all connected outputs using the layer shell protocol, with optional animated transitions between wallpapers.
+A wallpaper daemon for Wayland. Sets an image on all connected monitors with optional animated transitions.
 
-## Features
+## Why
+
+Everything on my NixOS setup is declarative. Window manager, dotfiles, keybindings — all in config. Wallpaper was the one thing that didn't fit.
+
+After switching to Niri I didn't find a tool that worked the way I wanted, so I wrote one. It does three things:
 
 - Sets wallpaper on login
-- Animated transitions (fade, grow, outer, wipe, wave)
-- Multiple resize strategies (crop, fit, stretch)
-- Declarative configuration via Home Manager
-- Automatic restarts on config changes
-- Multi-monitor support
+- Configures through Home Manager
+- Restarts when the config changes
 
-## Why this exists
-
-On NixOS, my setup is declarative. Window manager, terminal, theme, keybindings — everything lives in configuration. Rebuild the system and the same environment comes back.
-
-Wallpaper didn't follow that model.
-
-After moving to Niri, I couldn't find a tool that fit cleanly into this workflow.
-
-So this exists to do exactly three things:
-
-- Set a wallpaper on login
-- Be configured declaratively through Home Manager
-- Restart automatically when the image path changes
-
-Just a small tool that fits my needs. Happy to share in case it's useful to others.
+That's it.
 
 ## Requirements
 
-- Wayland compositor with layer shell support (Niri, Hyprland, Sway, etc.)
+- Wayland compositor with layer shell (Niri, Hyprland, Sway, etc.)
 - `WAYLAND_DISPLAY` set
-- Rust 2024 edition (1.85+)
+- Rust 1.85+ (2024 edition)
 
-## Installation
+## Install
 
-### Nix (recommended)
-
-Add to your flake inputs:
+### Nix
 
 ```nix
 {
-  inputs = {
-    wallpaper-rs.url = "github:hambosto/wallpaper-rs";
-  };
+  inputs.wallpaper-rs.url = "github:hambosto/wallpaper-rs";
 }
 ```
-
-Use with Home Manager:
 
 ```nix
 {
@@ -59,28 +40,27 @@ Use with Home Manager:
       image.path = "~/wallpapers/wallpaper.png";
 
       transition = {
-        # transition_type: "none" | "simple" | "fade" | "grow" | "outer" | "wipe" | "wave"
-        transition_type = "simple";
-        duration = 3.0;
-        transition_color = "#989264";
+        transition_type = "fade";
+        duration = 1.5;
+        edge_smoothness = 0.3;
+        transition_color = "#000000";
 
-        fade.bezier = [0.54 0.0 0.34 0.99];
+        wipe.direction = 0.0;
 
-        radial = {
-          step = 90;
-          bezier = [0.54 0.0 0.34 0.99];
-          invert_y = false;
-          pos = {
-            x = 0.5;
-            y = 0.5;
-          };
+        disc = {
+          center_x = 0.5;
+          center_y = 0.5;
         };
 
-        wave = {
-          step = 90;
-          bezier = [0.54 0.0 0.34 0.99];
-          angle = 45.0;
-          wave = [20.0 20.0];
+        stripes = {
+          stripe_count = 12.0;
+          angle = 30.0;
+        };
+
+        honeycomb = {
+          cell_size = 0.04;
+          center_x = 0.5;
+          center_y = 0.5;
         };
       };
 
@@ -95,338 +75,104 @@ Use with Home Manager:
 }
 ```
 
-Home Manager handles:
-
-* Config file at `$XDG_CONFIG_HOME/wallpaper-rs/config.toml`
-* systemd user service
-* `X-Restart-Triggers` for automatic restarts on config changes
+Home Manager takes care of the config file, systemd service, and restart triggers.
 
 ### From source
 
-```bash
-cargo build --release
 ```
-
-Binary:
-
-```bash
+cargo build --release
 target/release/wallpaper-rs
 ```
 
-### Manual setup
+### Manual
 
-1. Copy binary:
-
-```bash
-cp target/release/wallpaper-rs ~/.local/bin/
-```
-
-2. Create config:
-
-```toml
-# ~/.config/wallpaper-rs/config.toml
-
-[image]
-path = "/absolute/path/to/wallpaper.png"
-
-[transition]
-transition_type = "fade"
-duration = 3.0
-transition_color = "#989264"
-
-[resize]
-strategy = "crop"
-crop_gravity = "center"
-filter = "lanczos3"
-```
-
-3. Create systemd service:
-
-```ini
-# ~/.config/systemd/user/wallpaper-rs.service
-[Unit]
-ConditionEnvironment=WAYLAND_DISPLAY
-After=graphical-session.target
-
-[Service]
-ExecStart=%h/.local/bin/wallpaper-rs
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=graphical-session.target
-```
-
-4. Enable and start:
-
-```bash
-systemctl --user enable --now wallpaper-rs
-```
-
-To change wallpaper:
-
-1. Update the image path in config
-2. Restart:
-
-```bash
-systemctl --user restart wallpaper-rs
-```
-
-## Configuration
-
-Path:
-
-```text
-$XDG_CONFIG_HOME/wallpaper-rs/config.toml
-```
-
-All sections except `[image]` are optional. Omitted fields use their defaults.
-
-### `[image]` (required)
+Copy the binary somewhere on your PATH, then drop a config at `~/.config/wallpaper-rs/config.toml`:
 
 ```toml
 [image]
-path = "/absolute/path/to/wallpaper.png"
+path = "/path/to/wallpaper.png"
 ```
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `path` | string (path) | Yes | Absolute path to the wallpaper image |
+Run it however you want.
 
-Supported formats: PNG, JPEG, WebP
+## Config
 
----
+Location: `$XDG_CONFIG_HOME/wallpaper-rs/config.toml`
 
-### `[transition]` (optional)
+Only `[image]` is required. Everything else has sensible defaults.
 
-Controls the visual effect when switching wallpapers. The entire section defaults to sensible values.
+### `[image]`
 
-```toml
-[transition]
-transition_type = "fade"
-duration = 3.0
-transition_color = "#989264"
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | string | Path to the image. PNG, JPEG, WebP. |
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `transition_type` | string | `simple` | Transition effect (see below) |
-| `duration` | float | `3.0` | Duration of the transition in seconds |
-| `transition_color` | string (hex) | `"#000000"` | Starting color for transitions (`#RRGGBB` or `#RRGGBBAA`) |
+### `[transition]`
 
-**`transition_type` values:**
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `transition_type` | string | `fade` | Effect to use |
+| `duration` | float | `1.5` | Seconds |
+| `edge_smoothness` | float | `0.3` | Transition edge softness |
+| `transition_color` | hex | `#000000` | Start color (`#RGB` or `#RRGGBBAA`) |
 
-| Value | Effect |
-|-------|--------|
-| `none` | Instant cut, no animation |
-| `simple` | Per-pixel convergence toward target |
-| `fade` | Alpha blend from old to new |
-| `grow` | Circle expands outward from center |
-| `outer` | Circle contracts inward toward center |
-| `wipe` | Linear sweep across the screen |
-| `wave` | Sine-wave modulated sweep |
+Available effects: `none`, `simple`, `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`
 
----
+### `[transition.wipe]`
 
-### `[transition.fade]` (optional)
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `direction` | float | `0.0` | 0–3, randomized when 0 |
 
-Settings for the `fade` transition.
+### `[transition.disc]`
 
-```toml
-[transition.fade]
-bezier = [0.54, 0.0, 0.34, 0.99]
-```
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `center_x` | float | `0.5` | Horizontal origin (0.0–1.0), randomized when 0.5 |
+| `center_y` | float | `0.5` | Vertical origin (0.0–1.0), randomized when 0.5 |
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `bezier` | array of 4 floats | `[0.54, 0.0, 0.34, 0.99]` | Cubic bezier control points `(x1, y1, x2, y2)` for easing |
+### `[transition.stripes]`
 
----
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `stripe_count` | float | `12.0` | Number of stripes, randomized when 12 |
+| `angle` | float | `30.0` | Degrees, randomized when 30 |
 
-### `[transition.radial]` (optional)
+### `[transition.honeycomb]`
 
-Settings for `grow` and `outer` transitions.
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `cell_size` | float | `0.04` | Hex cell size, randomized when 0.04 |
+| `center_x` | float | `0.5` | Horizontal origin, randomized when 0.5 |
+| `center_y` | float | `0.5` | Vertical origin, randomized when 0.5 |
 
-```toml
-[transition.radial]
-step = 90
-bezier = [0.54, 0.0, 0.34, 0.99]
-invert_y = false
+### `[resize]`
 
-[transition.radial.pos]
-x = 0.5
-y = 0.5
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `step` | integer | `90` | Maximum pixel change per frame during convergence |
-| `bezier` | array of 4 floats | `[0.54, 0.0, 0.34, 0.99]` | Cubic bezier control points for easing |
-| `invert_y` | bool | `false` | Invert the Y axis for the `pos` coordinate system |
-
-**`[transition.radial.pos]`** — Sets the origin point for the radial effect. Can use pixels or percentages.
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `x` | float | `0.5` | Horizontal position (0.0–1.0 = percentage, or pixel value) |
-| `y` | float | `0.5` | Vertical position (0.0–1.0 = percentage, or pixel value) |
-
-- Values between 0.0 and 1.0 are treated as percentages (0.5 = center)
-- Values outside 0.0–1.0 are treated as pixel coordinates
-
----
-
-### `[transition.wave]` (optional)
-
-Settings for `wipe` and `wave` transitions.
-
-```toml
-[transition.wave]
-step = 90
-bezier = [0.54, 0.0, 0.34, 0.99]
-angle = 45.0
-wave = [20.0, 20.0]
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `step` | integer | `90` | Maximum pixel change per frame during convergence |
-| `bezier` | array of 4 floats | `[0.54, 0.0, 0.34, 0.99]` | Cubic bezier control points for easing |
-| `angle` | float | `45.0` | Angle in degrees for the sweep direction |
-| `wave` | array of 2 floats | `[20.0, 20.0]` | Wave frequency (x) and amplitude (y), only used by `wave` effect |
-
----
-
-### `[resize]` (optional)
-
-Controls how the image is resized to fit each output.
-
-```toml
-[resize]
-strategy = "crop"
-crop_gravity = "center"
-fill_color = [0, 0, 0, 255]
-filter = "lanczos3"
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `strategy` | string | `crop` | Resize strategy (see below) |
-| `crop_gravity` | string | `center` | Anchor point when cropping (see below) |
-| `fill_color` | array of 4 integers | `[0, 0, 0, 255]` | RGBA fill color for padding/letterboxing (0–255 each) |
-| `filter` | string | `lanczos3` | Resampling filter algorithm (see below) |
-
-**`strategy` values:**
-
-| Value | Behavior |
-|-------|----------|
-| `no` | No resizing. Places the image centered on a canvas filled with `fill_color`. |
-| `crop` | Resizes to fill the output, cropping overflow. Uses `crop_gravity` for alignment. |
-| `fit` | Resizes to fit inside the output, letterboxing with `fill_color`. |
-| `stretch` | Stretches to exact output dimensions (may distort aspect ratio). |
-
-**`crop_gravity` values:**
-
-| Value | Anchor |
-|-------|--------|
-| `top-left` | Top-left corner |
-| `top` | Top-center |
-| `top-right` | Top-right corner |
-| `left` | Left-center |
-| `center` | Center |
-| `right` | Right-center |
-| `bottom-left` | Bottom-left corner |
-| `bottom` | Bottom-center |
-| `bottom-right` | Bottom-right corner |
-
-**`filter` values:**
-
-| Value | Quality | Speed |
-|-------|---------|-------|
-| `nearest` | Lowest (box filter) | Fastest |
-| `bilinear` | Low | Fast |
-| `catmull-rom` | Medium | Moderate |
-| `mitchell` | Medium-high | Moderate |
-| `lanczos3` | Highest | Slowest |
-
----
-
-### Full example
-
-```toml
-[image]
-path = "/home/user/wallpapers/mountains.jpg"
-
-[transition]
-transition_type = "wave"
-duration = 5.0
-transition_color = "#989264"
-
-[transition.wave]
-step = 120
-bezier = [0.25, 0.1, 0.25, 1.0]
-angle = 30.0
-wave = [15.0, 25.0]
-
-[resize]
-strategy = "crop"
-crop_gravity = "center"
-fill_color = [0, 0, 0, 255]
-filter = "lanczos3"
-```
-
-### Minimal example
-
-Only `[image]` is required. Everything else has defaults.
-
-```toml
-[image]
-path = "/home/user/wallpapers/wallpaper.png"
-```
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `strategy` | string | `crop` | `no`, `crop`, `fit`, `stretch` |
+| `crop_gravity` | string | `center` | `top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right` |
+| `fill_color` | [u8; 4] | `[0, 0, 0, 255]` | RGBA for letterboxing |
+| `filter` | string | `lanczos3` | `nearest`, `bilinear`, `catmull-rom`, `mitchell`, `lanczos3` |
 
 ## How it works
 
-1. Reads the config
-2. Connects to Wayland
-3. Enumerates outputs
-4. Creates a background layer surface per output
-5. Renders image to SHM buffers with configured resize strategy
-6. Commits surfaces (with transition from configured color on first load)
-7. Enters event loop driven by calloop timers
+Reads config, connects to Wayland, creates a layer surface per output, renders the image into SHM buffers, commits it. If a transition is configured, it animates from the start color to the target image using calloop frame callbacks.
 
 ## Troubleshooting
 
-**WAYLAND_DISPLAY not set**
-
-* Not running inside a Wayland session
-
-**Failed to read config**
-
-* File missing or unreadable
-
-**path does not exist**
-
-* Image path in config points to a non-existent file
-
-**path is not a file**
-
-* Image path points to a directory instead of a file
-
-**Failed to detect image format**
-
-* File is not a supported image format (PNG, JPEG, WebP)
-
-**Wallpaper doesn't appear**
-
-* Compositor may not support layer shell
-* Another wallpaper process may be running
+- **WAYLAND_DISPLAY not set** — Not in a Wayland session.
+- **Failed to read config** — File missing or bad permissions.
+- **path does not exist** — Image path points to nothing.
+- **Failed to detect image format** — Not a supported image type.
+- **Wallpaper doesn't show** — Compositor might not support layer shell, or another wallpaper process is running.
 
 ## Environment
 
 | Variable | Required | Default |
-| --- | --- | --- |
-| WAYLAND_DISPLAY | Yes | - |
-| XDG_CONFIG_HOME | No | `$HOME/.config` |
+|----------|----------|---------|
+| `WAYLAND_DISPLAY` | Yes | — |
+| `XDG_CONFIG_HOME` | No | `~/.config` |
 
 ## License
 
