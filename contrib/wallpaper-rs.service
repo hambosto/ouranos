@@ -1,0 +1,14 @@
+[Install]
+WantedBy=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/wallpaper-rs
+Restart=on-failure
+
+[Unit]
+After=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+Description=A minimal wallpaper daemon for Wayland, written in Rust.
+Documentation=https://github.com/hambosto/wallpaper-rs
+PartOf=graphical-session.target
+X-Restart-Triggers=%h/.config/wallpaper-rs/config.toml

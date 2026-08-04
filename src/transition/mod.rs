@@ -1,13 +1,19 @@
 pub(crate) mod animation;
+mod disc;
 mod fade;
-mod radial;
-mod wave;
+mod honeycomb;
+mod stripes;
+mod wipe;
+mod zoom;
 
 use std::time::Instant;
 
+use disc::Disc;
 use fade::Fade;
-use radial::{Radial, RadialMode};
-use wave::Wave;
+use honeycomb::Honeycomb;
+use stripes::Stripes;
+use wipe::Wipe;
+use zoom::Zoom;
 
 use crate::config::{TransitionConfig, TransitionType};
 
@@ -15,27 +21,58 @@ enum Effect {
     None,
     Cleanup { step: u8 },
     Fade(Fade),
-    Radial(Radial),
-    Wave(Wave),
+    Wipe(Wipe),
+    Disc(Disc),
+    Stripes(Stripes),
+    Zoom(Zoom),
+    Honeycomb(Honeycomb),
 }
 
 impl Effect {
-    fn new(config: &TransitionConfig, dimensions: (u32, u32)) -> Self {
+    fn new(config: &TransitionConfig, (w, h): (u32, u32)) -> Self {
+        let dur = config.duration;
+        let smooth = config.edge_smoothness;
+        let dims = (w, h);
+
         match config.transition_type {
             TransitionType::None => Self::None,
             TransitionType::Simple => Self::Cleanup { step: 2 },
-            TransitionType::Fade => Self::Fade(Fade::new(config.fade.bezier, config.duration)),
-            TransitionType::Grow => Self::Radial(Radial::new(config.radial.bezier, config.duration, config.radial.step, config.radial.pos, config.radial.invert_y, dimensions, RadialMode::Grow)),
-            TransitionType::Outer => Self::Radial(Radial::new(config.radial.bezier, config.duration, config.radial.step, config.radial.pos, config.radial.invert_y, dimensions, RadialMode::Outer)),
-            TransitionType::Wipe | TransitionType::Wave => Self::Wave(Wave::new(config.wave.bezier, config.duration, config.wave.step, config.wave.angle, config.wave.wave, dimensions)),
+            TransitionType::Fade => Self::Fade(Fade::new(dur)),
+            TransitionType::Wipe => {
+                let dir = if config.wipe.direction == 0.0 { (rand::random::<f32>() * 4.0).floor() } else { config.wipe.direction };
+                Self::Wipe(Wipe::new(dur, dir, smooth, dims))
+            }
+            TransitionType::Disc => {
+                let rand_xy = || 0.2 + rand::random::<f32>() * 0.6;
+                let cx = if config.disc.center_x == 0.5 { rand_xy() } else { config.disc.center_x };
+                let cy = if config.disc.center_y == 0.5 { rand_xy() } else { config.disc.center_y };
+                Self::Disc(Disc::new(dur, cx, cy, smooth, dims))
+            }
+            TransitionType::Stripes => {
+                let count = if config.stripes.stripe_count == 12.0 {
+                    (4.0 + rand::random::<f32>() * 20.0).round()
+                } else {
+                    config.stripes.stripe_count
+                };
+                let angle = if config.stripes.angle == 30.0 { rand::random::<f32>() * 360.0 } else { config.stripes.angle };
+                Self::Stripes(Stripes::new(dur, count, angle, smooth, dims))
+            }
+            TransitionType::Zoom => Self::Zoom(Zoom::new(dur, dims)),
+            TransitionType::Honeycomb => {
+                let rand_xy = || 0.2 + rand::random::<f32>() * 0.6;
+                let size = if config.honeycomb.cell_size == 0.04 { 0.02 + rand::random::<f32>() * 0.04 } else { config.honeycomb.cell_size };
+                let cx = if config.honeycomb.center_x == 0.5 { rand_xy() } else { config.honeycomb.center_x };
+                let cy = if config.honeycomb.center_y == 0.5 { rand_xy() } else { config.honeycomb.center_y };
+                Self::Honeycomb(Honeycomb::new(dur, size, cx, cy, smooth, dims))
+            }
         }
     }
 
-    fn execute(&mut self, canvas: &mut [u8], target: &[u8], elapsed: f64) -> bool {
+    fn run(&mut self, canvas: &mut [u8], target: &[u8], elapsed: f64) -> bool {
         match self {
             Self::None => {
                 canvas.copy_from_slice(target);
-                return true;
+                true
             }
             Self::Cleanup { step } => {
                 let step = *step;
@@ -47,28 +84,24 @@ impl Effect {
                     }
                     done &= old == new;
                 }
-                return done;
+                done
             }
-            Self::Fade(e) => {
-                if !e.run(canvas, target, elapsed) {
-                    return false;
+            effect => {
+                let done = match effect {
+                    Self::Fade(e) => e.run(canvas, target, elapsed),
+                    Self::Wipe(e) => e.run(canvas, target, elapsed),
+                    Self::Disc(e) => e.run(canvas, target, elapsed),
+                    Self::Stripes(e) => e.run(canvas, target, elapsed),
+                    Self::Zoom(e) => e.run(canvas, target, elapsed),
+                    Self::Honeycomb(e) => e.run(canvas, target, elapsed),
+                    _ => unreachable!(),
+                };
+                if done {
+                    *effect = Self::Cleanup { step: 4 };
                 }
-                *self = Self::Cleanup { step: e.alpha as u8 / 4 + 4 };
-            }
-            Self::Radial(e) => {
-                if !e.run(canvas, target, elapsed) {
-                    return false;
-                }
-                *self = Self::Cleanup { step: e.step / 4 + 4 };
-            }
-            Self::Wave(e) => {
-                if !e.run(canvas, target, elapsed) {
-                    return false;
-                }
-                *self = Self::Cleanup { step: e.step / 4 + 4 };
+                false
             }
         }
-        false
     }
 }
 
@@ -76,8 +109,6 @@ pub(crate) struct Transition {
     effect: Option<Effect>,
     target: Vec<u8>,
     start: Instant,
-    width: u32,
-    height: u32,
 }
 
 impl Transition {
@@ -85,18 +116,13 @@ impl Transition {
         tracing::info!(
             transition_type = ?config.transition_type,
             duration = config.duration,
-            fps = config.fps,
-            "creating transition",
+            width = dimensions.0,
+            height = dimensions.1,
+            pixels = dimensions.0 * dimensions.1,
+            smoothness = config.edge_smoothness,
+            "applying transition effect"
         );
-        Self { effect: Some(Effect::new(config, dimensions)), target, start: Instant::now(), width: dimensions.0, height: dimensions.1 }
-    }
-
-    pub(crate) fn is_done(&self) -> bool {
-        self.effect.is_none()
-    }
-
-    pub(crate) fn dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
+        Self { effect: Some(Effect::new(config, dimensions)), target, start: Instant::now() }
     }
 
     pub(crate) fn frame(&mut self, canvas: &mut [u8]) -> bool {
@@ -105,10 +131,12 @@ impl Transition {
         };
 
         let elapsed = self.start.elapsed().as_secs_f64();
-        let done = effect.execute(canvas, &self.target, elapsed);
+        let done = effect.run(canvas, &self.target, elapsed);
+
         if done {
-            tracing::info!("transition finished at {elapsed:.2}s");
+            tracing::info!(elapsed_secs = elapsed, "transition finished");
             self.effect = None;
+            self.target.clear();
         }
         done
     }

@@ -21,14 +21,14 @@ impl Image {
 
         let file = File::open(path).context("failed to open image")?;
         let reader = ImageReader::new(BufReader::new(file)).with_guessed_format().context("failed to detect image format")?;
-
         let mut decoder = reader.into_decoder().context("failed to create decoder")?;
         let orientation = decoder.orientation().context("failed to read orientation")?;
-
         let mut image = DynamicImage::from_decoder(decoder).context("failed to decode image")?;
         image.apply_orientation(orientation);
 
-        Ok(Self { rgba: image.into_rgba8() })
+        let rgba = image.into_rgba8();
+        tracing::info!(width = rgba.width(), height = rgba.height(), pixels = rgba.width() * rgba.height(), "wallpaper image decoded");
+        Ok(Self { rgba })
     }
 
     pub(crate) fn render(&self, width: u32, height: u32, dst: &mut [u8], resize: &ResizeConfig) -> Result<()> {
