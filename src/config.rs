@@ -6,7 +6,7 @@ use hex_color::HexColor;
 use serde::Deserialize;
 use xdg::BaseDirectories;
 
-const CONFIG_PREFIX: &str = "wallpaper-rs";
+const CONFIG_PREFIX: &str = "ouranos";
 const CONFIG_FILE: &str = "config.toml";
 
 impl Config {

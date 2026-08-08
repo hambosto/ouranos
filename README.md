@@ -1,4 +1,4 @@
-# wallpaper-rs
+# ouranos
 
 A wallpaper daemon for Wayland. Sets an image on all connected monitors with optional animated transitions.
 
@@ -26,15 +26,15 @@ That's it.
 
 ```nix
 {
-  inputs.wallpaper-rs.url = "github:hambosto/wallpaper-rs";
+  inputs.ouranos.url = "github:hambosto/ouranos";
 }
 ```
 
 ```nix
 {
-  imports = [ inputs.wallpaper-rs.homeManagerModules.default ];
+  imports = [ inputs.ouranos.homeManagerModules.default ];
 
-  services.wallpaper-rs = {
+  services.ouranos = {
     enable = true;
     settings = {
       image.path = "~/wallpapers/wallpaper.png";
@@ -81,12 +81,12 @@ Home Manager takes care of the config file, systemd service, and restart trigger
 
 ```
 cargo build --release
-target/release/wallpaper-rs
+target/release/ouranos
 ```
 
 ### Manual
 
-Copy the binary somewhere on your PATH, then drop a config at `~/.config/wallpaper-rs/config.toml`:
+Copy the binary somewhere on your PATH, then drop a config at `~/.config/ouranos/config.toml`:
 
 ```toml
 [image]
@@ -97,7 +97,7 @@ Run it however you want.
 
 ## Config
 
-Location: `$XDG_CONFIG_HOME/wallpaper-rs/config.toml`
+Location: `$XDG_CONFIG_HOME/ouranos/config.toml`
 
 Only `[image]` is required. Everything else has sensible defaults.
 

@@ -1,7 +1,7 @@
 {
   mkShell,
-  wallpaper-rs,
+  ouranos,
 }:
 mkShell {
-  inputsFrom = [ wallpaper-rs ];
+  inputsFrom = [ ouranos ];
 }

@@ -1,11 +1,11 @@
 [package]
-name = "wallpaper-rs"
+name = "ouranos"
 version = "26.3.0"
 edition = "2024"
 license = "MIT"
 authors = ["Ilham Putra Husada <hambosto@gmail.com>"]
-homepage = "https://github.com/hambosto/wallpaper-rs"
-repository = "https://github.com/hambosto/wallpaper-rs"
+homepage = "https://github.com/hambosto/ouranos"
+repository = "https://github.com/hambosto/ouranos"
 
 [dependencies]
 anyhow                 = "1.0.104"

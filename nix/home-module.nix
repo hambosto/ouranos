@@ -5,16 +5,16 @@
   ...
 }:
 let
-  cfg = config.services.wallpaper-rs;
+  cfg = config.services.ouranos;
   tomlFormat = pkgs.formats.toml { };
 in
 {
-  options.services.wallpaper-rs = {
-    enable = lib.mkEnableOption "Whether to enable wallpaper-rs";
+  options.services.ouranos = {
+    enable = lib.mkEnableOption "Whether to enable ouranos";
 
     package = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
-      description = "The wallpaper-rs package to use.";
+      description = "The ouranos package to use.";
     };
 
     settings = lib.mkOption {
@@ -27,8 +27,8 @@ in
       '';
       description = ''
         Configuration written to
-        {file}`$XDG_CONFIG_HOME/wallpaper-rs/config.toml`.
-        See <https://github.com/hambosto/wallpaper-rs>
+        {file}`$XDG_CONFIG_HOME/ouranos/config.toml`.
+        See <https://github.com/hambosto/ouranos>
         for the full list of options.
       '';
     };
@@ -37,12 +37,12 @@ in
   config = lib.mkIf cfg.enable {
 
     xdg.configFile = {
-      "wallpaper-rs/config.toml" = lib.mkIf (cfg.settings != { }) {
-        source = tomlFormat.generate "wallpaper-rs-config.toml" cfg.settings;
+      "ouranos/config.toml" = lib.mkIf (cfg.settings != { }) {
+        source = tomlFormat.generate "ouranos-config.toml" cfg.settings;
       };
     };
 
-    systemd.user.services.wallpaper-rs = lib.mkIf (cfg.package != null) {
+    systemd.user.services.ouranos = lib.mkIf (cfg.package != null) {
       Install.WantedBy = [ config.wayland.systemd.target ];
 
       Service = {
@@ -54,10 +54,10 @@ in
         After = [ config.wayland.systemd.target ];
         ConditionEnvironment = "WAYLAND_DISPLAY";
         Description = "A minimal wallpaper daemon for Wayland, written in Rust.";
-        Documentation = "https://github.com/hambosto/wallpaper-rs";
+        Documentation = "https://github.com/hambosto/ouranos";
         PartOf = [ config.wayland.systemd.target ];
         X-Restart-Triggers = lib.mkIf (cfg.settings != { }) [
-          "${config.xdg.configFile."wallpaper-rs/config.toml".source}"
+          "${config.xdg.configFile."ouranos/config.toml".source}"
         ];
       };
     };

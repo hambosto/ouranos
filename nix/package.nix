@@ -17,7 +17,7 @@ let
     "${year}-${month}-${day}";
 in
 rustPlatform.buildRustPackage (final: {
-  pname = "wallpaper-rs";
+  pname = "ouranos";
   version = "unstable-${fmtDate self.lastModifiedDate}-${self.shortRev or "dirty"}";
 
   src = lib.cleanSourceWith {
@@ -47,9 +47,9 @@ rustPlatform.buildRustPackage (final: {
 
   meta = {
     description = "A minimal wallpaper daemon for Wayland, written in Rust.";
-    homepage = "https://github.com/hambosto/wallpaper-rs";
+    homepage = "https://github.com/hambosto/ouranos";
     license = lib.licenses.mit;
-    mainProgram = "wallpaper-rs";
+    mainProgram = "ouranos";
     platforms = lib.platforms.linux;
   };
 })

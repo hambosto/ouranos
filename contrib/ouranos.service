@@ -2,13 +2,13 @@
 WantedBy=graphical-session.target
 
 [Service]
-ExecStart=/usr/bin/wallpaper-rs
+ExecStart=/usr/bin/ouranos
 Restart=on-failure
 
 [Unit]
 After=graphical-session.target
 ConditionEnvironment=WAYLAND_DISPLAY
 Description=A minimal wallpaper daemon for Wayland, written in Rust.
-Documentation=https://github.com/hambosto/wallpaper-rs
+Documentation=https://github.com/hambosto/ouranos
 PartOf=graphical-session.target
-X-Restart-Triggers=%h/.config/wallpaper-rs/config.toml
+X-Restart-Triggers=%h/.config/ouranos/config.toml

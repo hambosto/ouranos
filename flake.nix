@@ -28,7 +28,7 @@
     in
     {
       overlays.default = final: prev: {
-        wallpaper-rs = final.callPackage ./nix/package.nix { inherit self; };
+        ouranos = final.callPackage ./nix/package.nix { inherit self; };
       };
 
       packages = forEachSystem (
@@ -40,14 +40,14 @@
       devShells = forEachSystem (
         { pkgs, system }: {
           default = pkgs.callPackage ./nix/shell.nix {
-            wallpaper-rs = self.packages.${system}.default;
+            ouranos = self.packages.${system}.default;
           };
         }
       );
 
       homeManagerModules.default = { lib, pkgs, ... }: {
         imports = [ ./nix/home-module.nix ];
-        services.wallpaper-rs.package =
+        services.ouranos.package =
           lib.mkDefault
             self.packages.${pkgs.stdenv.hostPlatform.system}.default;
       };
