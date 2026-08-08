@@ -1,6 +1,8 @@
 # ouranos
 
-A wallpaper daemon for Wayland. Sets an image on all connected monitors with optional animated transitions.
+> _Set the sky of your desktop._
+
+A Wayland wallpaper daemon with animated transitions. Declarative, minimal, Nix-native.
 
 ## Why
 

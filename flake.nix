@@ -1,5 +1,5 @@
 {
-  description = "A minimal wallpaper daemon for Wayland, written in Rust";
+  description = "Set the sky of your desktop — a Wayland wallpaper daemon with animated transitions";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
