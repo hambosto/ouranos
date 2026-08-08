@@ -1,8 +1,16 @@
+<div align="center">
+
 # ouranos
 
-> _Set the sky of your desktop._
+A Wayland wallpaper daemon with animated transitions.
 
-A Wayland wallpaper daemon with animated transitions. Declarative, minimal, Nix-native.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust 2024](https://img.shields.io/badge/rust-2024-orange.svg)](https://www.rust-lang.org/)
+[![Nix Flake](https://img.shields.io/badge/nix-flake-purple.svg)](https://nixos.org/)
+[![Wayland](https://img.shields.io/badge/wayland-layer--shell-green.svg)](https://wayland.app/)
+[![Linux](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://www.linux.org/)
+
+</div>
 
 ## Why
 

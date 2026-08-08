@@ -53,7 +53,7 @@ in
       Unit = {
         After = [ config.wayland.systemd.target ];
         ConditionEnvironment = "WAYLAND_DISPLAY";
-        Description = "Set the sky of your desktop — a Wayland wallpaper daemon with animated transitions.";
+        Description = "A Wayland wallpaper daemon with animated transitions.";
         Documentation = "https://github.com/hambosto/ouranos";
         PartOf = [ config.wayland.systemd.target ];
         X-Restart-Triggers = lib.mkIf (cfg.settings != { }) [

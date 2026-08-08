@@ -8,7 +8,7 @@ Restart=on-failure
 [Unit]
 After=graphical-session.target
 ConditionEnvironment=WAYLAND_DISPLAY
-Description=Set the sky of your desktop — a Wayland wallpaper daemon with animated transitions.
+Description=A Wayland wallpaper daemon with animated transitions.
 Documentation=https://github.com/hambosto/ouranos
 PartOf=graphical-session.target
 X-Restart-Triggers=%h/.config/ouranos/config.toml
