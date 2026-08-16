@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use fast_image_resize::FilterType;
+use figment::Figment;
+use figment::providers::{Format, Toml};
 use hex_color::HexColor;
 use serde::Deserialize;
 use xdg::BaseDirectories;
@@ -9,18 +11,7 @@ use xdg::BaseDirectories;
 const CONFIG_PREFIX: &str = "ouranos";
 const CONFIG_FILE: &str = "config.toml";
 
-impl Config {
-    pub(crate) fn load() -> Result<Self> {
-        let path = BaseDirectories::with_prefix(CONFIG_PREFIX).find_config_file(CONFIG_FILE).context("failed to find config file")?;
-        tracing::info!(path = %path.display(), "reading configuration");
-
-        let content = std::fs::read_to_string(&path).context("cannot read config")?;
-        toml::from_str(&content).context("cannot parse config")
-    }
-}
-
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     pub(crate) image: ImageConfig,
     #[serde(default)]
@@ -29,14 +20,21 @@ pub(crate) struct Config {
     pub(crate) resize: ResizeConfig,
 }
 
+impl Config {
+    pub(crate) fn load() -> Result<Self> {
+        let path = BaseDirectories::with_prefix(CONFIG_PREFIX).find_config_file(CONFIG_FILE).context("failed to find config file")?;
+        tracing::info!(path = %path.display(), "reading configuration");
+
+        Figment::from(Toml::file(&path)).extract().context("cannot parse config")
+    }
+}
+
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct ImageConfig {
     pub(crate) path: PathBuf,
 }
 
 #[derive(Deserialize)]
-#[serde(default, deny_unknown_fields)]
 pub(crate) struct TransitionConfig {
     pub(crate) transition_type: TransitionType,
     pub(crate) duration: f32,
@@ -64,7 +62,6 @@ impl Default for TransitionConfig {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct WipeConfig {
     pub(crate) direction: f32,
 }
@@ -76,7 +73,6 @@ impl Default for WipeConfig {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct DiscConfig {
     pub(crate) center_x: f32,
     pub(crate) center_y: f32,
@@ -89,7 +85,6 @@ impl Default for DiscConfig {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct StripesConfig {
     pub(crate) stripe_count: f32,
     pub(crate) angle: f32,
@@ -102,7 +97,6 @@ impl Default for StripesConfig {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct HoneycombConfig {
     pub(crate) cell_size: f32,
     pub(crate) center_x: f32,
@@ -116,7 +110,6 @@ impl Default for HoneycombConfig {
 }
 
 #[derive(Deserialize)]
-#[serde(default, deny_unknown_fields)]
 pub(crate) struct ResizeConfig {
     pub(crate) strategy: ResizeStrategy,
     pub(crate) crop_gravity: CropGravity,

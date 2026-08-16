@@ -1,22 +1,22 @@
 [package]
-name = "ouranos"
-version = "26.3.0"
-edition = "2024"
-license = "MIT"
-authors = ["Ilham Putra Husada <hambosto@gmail.com>"]
-homepage = "https://github.com/hambosto/ouranos"
+name       = "ouranos"
+version    = "26.3.0"
+edition    = "2024"
+license    = "MIT"
+authors    = ["Ilham Putra Husada <hambosto@gmail.com>"]
+homepage   = "https://github.com/hambosto/ouranos"
 repository = "https://github.com/hambosto/ouranos"
 
 [dependencies]
 anyhow                 = "1.0.104"
 fast_image_resize      = "6.1.0"
+figment                = { version = "0.10.19", features = ["toml"] }
 garb                   = "0.2.8"
 hex_color              = { version = "3.0.0", features = ["serde"] }
 image                  = "0.25.10"
 rand                   = "0.10.2"
 serde                  = { version = "1.0.229", features = ["derive"] }
 smithay-client-toolkit = "0.21.1"
-toml                   = "1.1.4"
 tracing                = "0.1.44"
 tracing-subscriber     = "0.3.23"
 wayland-client         = "0.31.15"
