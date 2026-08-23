@@ -51,8 +51,8 @@ impl CompositorHandler for State {
 impl LayerShellHandler for State {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &LayerSurface) {}
 
-    fn configure(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, layer_surface: &LayerSurface, _: LayerSurfaceConfigure, _: u32) {
-        self.handle_configure(layer_surface.wl_surface(), queue_handle);
+    fn configure(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, layer_surface: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {
+        self.handle_configure(layer_surface.wl_surface(), configure.new_size, queue_handle);
     }
 }
 

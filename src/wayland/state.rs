@@ -41,16 +41,16 @@ impl State {
 
     pub(super) fn create_surfaces(&mut self, queue_handle: &QueueHandle<Self>) {
         for handle in self.output_state.outputs() {
+            if self.surfaces.iter().any(|s| s.output == handle) {
+                continue;
+            }
+
             let Some(info) = self.output_state.info(&handle) else {
                 continue;
             };
 
             let name = info.name.as_deref().unwrap_or("unknown");
             let description = info.description.as_deref().unwrap_or("unknown");
-
-            if self.surfaces.iter().any(|s| s.output_name == name) {
-                continue;
-            }
 
             let Some((width, height)) = info
                 .logical_size
@@ -69,7 +69,7 @@ impl State {
             layer_surface.commit();
 
             tracing::info!(name, description, width, height, "monitor detected, creating wallpaper surface");
-            self.surfaces.push(Surface::new(layer_surface, width.cast_unsigned(), height.cast_unsigned(), name.to_string()));
+            self.surfaces.push(Surface::new(layer_surface, handle, width.cast_unsigned(), height.cast_unsigned(), name.to_string()));
         }
     }
 
@@ -87,7 +87,7 @@ impl State {
             return Ok(());
         };
 
-        let pending_count = self.surfaces.iter().filter(|s| s.configured && !s.rendered).count();
+        let pending_count = self.surfaces.iter().filter(|s| s.is_ready()).count();
         if pending_count == 0 {
             return Ok(());
         }
@@ -102,25 +102,30 @@ impl State {
         let image = Image::open(&config.image.path)?;
         let config = self.config.as_ref().context("config not set")?;
         for surface in &mut self.surfaces {
-            if !surface.configured || surface.rendered {
+            if !surface.is_ready() {
                 continue;
             }
             surface.begin_transition(&image, config, &self.shm)?;
-            surface.commit(&self.shm, queue_handle)?;
+            surface.commit(queue_handle)?;
         }
 
-        tracing::info!(outputs = pending_count, "initial wallpaper rendered");
+        tracing::info!(outputs = pending_count, "wallpaper rendered");
 
         Ok(())
     }
 
-    pub(super) fn handle_configure(&mut self, wl_surface: &WlSurface, queue_handle: &QueueHandle<Self>) {
+    pub(super) fn handle_configure(&mut self, wl_surface: &WlSurface, new_size: (u32, u32), queue_handle: &QueueHandle<Self>) {
         let Some(surface) = self.find_surface_mut(wl_surface) else {
             return;
         };
 
-        tracing::debug!(width = surface.width, height = surface.height, "compositor acknowledged surface, ready to render");
-        surface.configure();
+        let (new_width, new_height) = new_size;
+        if new_width > 0 && new_height > 0 && (new_width != surface.width || new_height != surface.height) {
+            tracing::info!(old_width = surface.width, old_height = surface.height, new_width, new_height, "compositor requested new surface size, resizing");
+            surface.resize(new_width, new_height);
+        } else {
+            surface.configure();
+        }
 
         if let Err(e) = self.render_pending(queue_handle) {
             tracing::warn!(?e, "failed to apply pending wallpaper");
@@ -132,34 +137,26 @@ impl State {
             return;
         };
 
-        if self.surfaces[idx].transition.is_none() {
-            return;
-        }
-
-        if let Err(e) = self.surfaces[idx].tick_transition(&self.shm, queue_handle) {
+        if let Err(e) = self.surfaces[idx].tick_transition(queue_handle) {
             tracing::warn!(?e, "failed to tick transition");
         }
     }
 
     pub(super) fn handle_output_destroyed(&mut self, wl_output: &WlOutput) {
-        let Some(info) = self.output_state.info(wl_output) else {
-            return;
-        };
-
-        let name = info.name.as_deref().unwrap_or("unknown");
         let mut removed = 0;
 
         self.surfaces.retain(|s| {
-            if s.output_name != name {
+            if &s.output != wl_output {
                 return true;
             }
+            tracing::info!(name = s.output_name.as_str(), "wallpaper surface destroyed for disconnected output");
             s.layer_surface.wl_surface().destroy();
             removed += 1;
             false
         });
 
         if removed > 0 {
-            tracing::info!(name, removed, "wallpaper surfaces destroyed for disconnected output");
+            tracing::info!(removed, "cleanup complete for disconnected output");
         }
     }
 }
