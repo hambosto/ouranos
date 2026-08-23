@@ -18,6 +18,7 @@ pub(super) struct Surface {
     pub(super) height: u32,
     pub(super) output_name: String,
     pub(super) configured: bool,
+    pub(super) rendered: bool,
     pool: Option<SlotPool>,
     pixels: Vec<u8>,
     pub(super) transition: Option<Transition>,
@@ -25,7 +26,7 @@ pub(super) struct Surface {
 
 impl Surface {
     pub(super) fn new(layer_surface: LayerSurface, width: u32, height: u32, output_name: String) -> Self {
-        Self { layer_surface, width, height, output_name, configured: false, pool: None, pixels: Vec::new(), transition: None }
+        Self { layer_surface, width, height, output_name, configured: false, rendered: false, pool: None, pixels: Vec::new(), transition: None }
     }
 
     pub(super) fn configure(&mut self) {
@@ -46,6 +47,7 @@ impl Surface {
 
         self.pool = Some(SlotPool::new(size, shm).context("failed to create shm pool")?);
         self.transition = Some(Transition::new(&config.transition, (self.width, self.height), target));
+        self.rendered = true;
 
         Ok(())
     }

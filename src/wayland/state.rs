@@ -87,7 +87,7 @@ impl State {
             return Ok(());
         };
 
-        let pending_count = self.surfaces.iter().filter(|s| s.transition.is_none() && s.configured).count();
+        let pending_count = self.surfaces.iter().filter(|s| s.configured && !s.rendered).count();
         if pending_count == 0 {
             return Ok(());
         }
@@ -102,7 +102,7 @@ impl State {
         let image = Image::open(&config.image.path)?;
         let config = self.config.as_ref().context("config not set")?;
         for surface in &mut self.surfaces {
-            if surface.transition.is_some() || !surface.configured {
+            if !surface.configured || surface.rendered {
                 continue;
             }
             surface.begin_transition(&image, config, &self.shm)?;
@@ -119,7 +119,7 @@ impl State {
             return;
         };
 
-        tracing::info!(width = surface.width, height = surface.height, "compositor acknowledged surface, ready to render");
+        tracing::debug!(width = surface.width, height = surface.height, "compositor acknowledged surface, ready to render");
         surface.configure();
 
         if let Err(e) = self.render_pending(queue_handle) {
