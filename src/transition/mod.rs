@@ -10,7 +10,6 @@ mod zoom;
 
 use std::time::Instant;
 
-use crate::config::{TransitionConfig, TransitionType};
 use disc::Disc;
 use effect::Effect;
 use fade::Fade;
@@ -19,6 +18,8 @@ use stripes::Stripes;
 use surface::Surface;
 use wipe::Wipe;
 use zoom::Zoom;
+
+use crate::config::{TransitionConfig, TransitionType};
 
 enum Phase {
     Blit,
