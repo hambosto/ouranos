@@ -4,10 +4,9 @@ use smithay_client_toolkit::registry::{ProvidesRegistryState, RegistryState};
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::wlr_layer::{LayerShellHandler, LayerSurface, LayerSurfaceConfigure};
 use smithay_client_toolkit::shm::{Shm, ShmHandler};
-use wayland_client::protocol::wl_buffer::{Event, WlBuffer};
 use wayland_client::protocol::wl_output::{Transform, WlOutput};
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, QueueHandle};
+use wayland_client::{Connection, QueueHandle};
 
 use super::state::State;
 
@@ -35,7 +34,9 @@ impl OutputHandler for State {
 }
 
 impl CompositorHandler for State {
-    fn scale_factor_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: i32) {}
+    fn scale_factor_changed(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, wl_surface: &WlSurface, new_factor: i32) {
+        self.handle_scale_changed(wl_surface, new_factor, queue_handle);
+    }
 
     fn transform_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: Transform) {}
 
@@ -49,7 +50,9 @@ impl CompositorHandler for State {
 }
 
 impl LayerShellHandler for State {
-    fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &LayerSurface) {}
+    fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer_surface: &LayerSurface) {
+        self.handle_closed(layer_surface);
+    }
 
     fn configure(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, layer_surface: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {
         self.handle_configure(layer_surface.wl_surface(), configure.new_size, queue_handle);
@@ -60,10 +63,6 @@ impl ShmHandler for State {
     fn shm_state(&mut self) -> &mut Shm {
         &mut self.shm
     }
-}
-
-impl Dispatch<WlBuffer, (), State> for State {
-    fn event(_: &mut State, _: &WlBuffer, _: Event, _: &(), _: &Connection, _: &QueueHandle<State>) {}
 }
 
 smithay_client_toolkit::delegate_registry!(State);

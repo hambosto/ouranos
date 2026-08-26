@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::{Context, Result};
 use fast_image_resize::images::{Image, ImageRef};
 use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
@@ -5,19 +7,21 @@ use image::{GenericImageView, Rgba, RgbaImage};
 
 use crate::config::{CropGravity, ResizeConfig, ResizeStrategy};
 
-pub(super) fn apply(src: &RgbaImage, width: u32, height: u32, config: &ResizeConfig) -> Result<RgbaImage> {
+pub(super) fn apply<'a>(src: &'a RgbaImage, width: u32, height: u32, config: &ResizeConfig) -> Result<Cow<'a, RgbaImage>> {
     let (src_w, src_h) = src.dimensions();
     if (src_w, src_h) == (width, height) {
-        return Ok(src.clone());
+        return Ok(Cow::Borrowed(src));
     }
 
     let filter = config.filter.into();
-    match config.strategy {
+    let rgba_image = match config.strategy {
         ResizeStrategy::No => resize_no(src, width, height, config.fill_color),
         ResizeStrategy::Crop => resize_crop(src, width, height, config.crop_gravity, filter),
         ResizeStrategy::Fit => resize_fit(src, width, height, config.fill_color, filter),
         ResizeStrategy::Stretch => resize_stretch(src, width, height, filter),
-    }
+    };
+
+    Ok(Cow::Owned(rgba_image?))
 }
 
 fn fast_resize(src: &RgbaImage, width: u32, height: u32, options: &ResizeOptions) -> Result<RgbaImage> {

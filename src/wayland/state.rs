@@ -3,7 +3,7 @@ use smithay_client_toolkit::compositor::CompositorState;
 use smithay_client_toolkit::output::OutputState;
 use smithay_client_toolkit::registry::RegistryState;
 use smithay_client_toolkit::shell::WaylandSurface;
-use smithay_client_toolkit::shell::wlr_layer::{Anchor, Layer, LayerShell};
+use smithay_client_toolkit::shell::wlr_layer::{LayerShell, LayerSurface};
 use smithay_client_toolkit::shm::Shm;
 use wayland_client::QueueHandle;
 use wayland_client::globals::GlobalList;
@@ -40,36 +40,18 @@ impl State {
     }
 
     pub(super) fn create_surfaces(&mut self, queue_handle: &QueueHandle<Self>) {
-        for handle in self.output_state.outputs() {
-            if self.surfaces.iter().any(|s| s.output == handle) {
+        for output in self.output_state.outputs() {
+            if self.surfaces.iter().any(|s| s.output == output) {
                 continue;
             }
 
-            let Some(info) = self.output_state.info(&handle) else {
+            let Some(info) = self.output_state.info(&output) else {
                 continue;
             };
 
-            let name = info.name.as_deref().unwrap_or("unknown");
-            let description = info.description.as_deref().unwrap_or("unknown");
-
-            let Some((width, height)) = info
-                .logical_size
-                .filter(|(w, h)| *w > 0 && *h > 0)
-                .or_else(|| info.modes.iter().find(|m| m.current).map(|m| m.dimensions))
-            else {
-                tracing::warn!(name, "no valid dimensions, skipping");
-                continue;
-            };
-
-            let wl_surface = self.compositor.create_surface(queue_handle);
-            let layer_surface = self.layer_shell.create_layer_surface(queue_handle, wl_surface, Layer::Background, Some("wallpaper-rs"), Some(&handle));
-            layer_surface.set_anchor(Anchor::all());
-            layer_surface.set_exclusive_zone(-1);
-            layer_surface.set_size(0, 0);
-            layer_surface.commit();
-
-            tracing::info!(name, description, width, height, "monitor detected, creating wallpaper surface");
-            self.surfaces.push(Surface::new(layer_surface, handle, width.cast_unsigned(), height.cast_unsigned(), name.to_string()));
+            if let Some(surface) = Surface::create(&self.compositor, &self.layer_shell, output, &info, queue_handle) {
+                self.surfaces.push(surface);
+            }
         }
     }
 
@@ -83,33 +65,26 @@ impl State {
     }
 
     fn render_pending(&mut self, queue_handle: &QueueHandle<Self>) -> Result<()> {
-        let Some(config) = &self.config else {
+        let Some(config) = self.config.as_ref() else {
             return Ok(());
         };
 
-        let pending_count = self.surfaces.iter().filter(|s| s.is_ready()).count();
-        if pending_count == 0 {
+        let pending = self.surfaces.iter().filter(|s| s.needs_render()).count();
+        if pending == 0 {
             return Ok(());
         }
 
         tracing::info!(
-            pending_count,
+            outputs = pending,
             image = %config.image.path.display(),
             strategy = ?config.resize.strategy,
             "loading and resizing wallpaper"
         );
 
         let image = Image::open(&config.image.path)?;
-        let config = self.config.as_ref().context("config not set")?;
-        for surface in &mut self.surfaces {
-            if !surface.is_ready() {
-                continue;
-            }
-            surface.begin_transition(&image, config, &self.shm)?;
-            surface.commit(queue_handle)?;
+        for surface in self.surfaces.iter_mut().filter(|s| s.needs_render()) {
+            surface.start_transition(&image, config, &self.shm, queue_handle)?;
         }
-
-        tracing::info!(outputs = pending_count, "wallpaper rendered");
 
         Ok(())
     }
@@ -119,44 +94,47 @@ impl State {
             return;
         };
 
-        let (new_width, new_height) = new_size;
-        if new_width > 0 && new_height > 0 && (new_width != surface.width || new_height != surface.height) {
-            tracing::info!(old_width = surface.width, old_height = surface.height, new_width, new_height, "compositor requested new surface size, resizing");
-            surface.resize(new_width, new_height);
-        } else {
-            surface.configure();
-        }
-
+        surface.configure(new_size);
         if let Err(e) = self.render_pending(queue_handle) {
             tracing::warn!(?e, "failed to apply pending wallpaper");
         }
     }
 
     pub(super) fn handle_frame_callback(&mut self, wl_surface: &WlSurface, queue_handle: &QueueHandle<Self>) {
-        let Some(idx) = self.surfaces.iter().position(|s| s.layer_surface.wl_surface() == wl_surface) else {
+        let Some(surface) = self.find_surface_mut(wl_surface) else {
             return;
         };
 
-        if let Err(e) = self.surfaces[idx].tick_transition(queue_handle) {
+        if let Err(e) = surface.tick(queue_handle) {
             tracing::warn!(?e, "failed to tick transition");
         }
     }
 
-    pub(super) fn handle_output_destroyed(&mut self, wl_output: &WlOutput) {
-        let mut removed = 0;
+    pub(super) fn handle_scale_changed(&mut self, wl_surface: &WlSurface, new_factor: i32, queue_handle: &QueueHandle<Self>) {
+        let Some(surface) = self.find_surface_mut(wl_surface) else {
+            return;
+        };
 
-        self.surfaces.retain(|s| {
-            if &s.output != wl_output {
-                return true;
-            }
-            tracing::info!(name = s.output_name.as_str(), "wallpaper surface destroyed for disconnected output");
-            s.layer_surface.wl_surface().destroy();
-            removed += 1;
-            false
-        });
-
-        if removed > 0 {
-            tracing::info!(removed, "cleanup complete for disconnected output");
+        surface.rescale(new_factor);
+        if let Err(e) = self.render_pending(queue_handle) {
+            tracing::warn!(?e, "failed to apply pending wallpaper");
         }
+    }
+
+    pub(super) fn handle_closed(&mut self, layer_surface: &LayerSurface) {
+        let wl_surface = layer_surface.wl_surface();
+        self.surfaces.retain(|s| s.layer_surface.wl_surface() != wl_surface);
+        tracing::info!("layer surface closed by compositor, releasing resources");
+    }
+
+    pub(super) fn handle_output_destroyed(&mut self, wl_output: &WlOutput) {
+        self.surfaces.retain(|s| {
+            if s.output == *wl_output {
+                s.destroy();
+                false
+            } else {
+                true
+            }
+        });
     }
 }
