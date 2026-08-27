@@ -16,7 +16,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 fn main() -> Result<()> {
     tracing_subscriber::fmt().with_file(true).with_line_number(true).init();
 
-    let version = option_env!("WALLPAPER_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+    let version = option_env!("OURANOS_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
     tracing::info!(version, "ouranos starting");
 
     let config = Config::load().context("failed to load config")?;

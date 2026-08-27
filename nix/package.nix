@@ -43,7 +43,7 @@ rustPlatform.buildRustPackage (final: {
     pkg-config
   ];
 
-  WALLPAPER_BUILD_VERSION = "unstable ${fmtDate self.lastModifiedDate} (commit ${self.rev or "dirty"})";
+  OURANOS_BUILD_VERSION = "unstable ${fmtDate self.lastModifiedDate} (commit ${self.rev or "dirty"})";
 
   meta = {
     description = "A Wayland wallpaper daemon with animated transitions.";
