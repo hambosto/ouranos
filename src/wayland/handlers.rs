@@ -29,19 +29,37 @@ impl OutputHandler for State {
     fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlOutput) {}
 
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, wl_output: WlOutput) {
-        self.handle_output_destroyed(&wl_output);
+        self.surfaces.retain(|s| {
+            if s.output == wl_output {
+                s.destroy();
+                false
+            } else {
+                true
+            }
+        });
     }
 }
 
 impl CompositorHandler for State {
     fn scale_factor_changed(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, wl_surface: &WlSurface, new_factor: i32) {
-        self.handle_scale_changed(wl_surface, new_factor, queue_handle);
+        let Some(surface) = self.find_surface_mut(wl_surface) else {
+            return;
+        };
+
+        surface.rescale(new_factor);
+        self.render(queue_handle);
     }
 
     fn transform_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: Transform) {}
 
     fn frame(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, wl_surface: &WlSurface, _: u32) {
-        self.handle_frame_callback(wl_surface, queue_handle);
+        let Some(surface) = self.find_surface_mut(wl_surface) else {
+            return;
+        };
+
+        if let Err(e) = surface.tick(queue_handle) {
+            tracing::warn!(?e, "failed to tick transition");
+        }
     }
 
     fn surface_enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: &WlOutput) {}
@@ -51,11 +69,18 @@ impl CompositorHandler for State {
 
 impl LayerShellHandler for State {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer_surface: &LayerSurface) {
-        self.handle_closed(layer_surface);
+        let wl_surface = layer_surface.wl_surface();
+        self.surfaces.retain(|s| s.layer_surface.wl_surface() != wl_surface);
+        tracing::info!("layer surface closed by compositor, releasing resources");
     }
 
     fn configure(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, layer_surface: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {
-        self.handle_configure(layer_surface.wl_surface(), configure.new_size, queue_handle);
+        let Some(surface) = self.find_surface_mut(layer_surface.wl_surface()) else {
+            return;
+        };
+
+        surface.configure(configure.new_size);
+        self.render(queue_handle);
     }
 }
 

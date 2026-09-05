@@ -3,11 +3,10 @@ use smithay_client_toolkit::compositor::CompositorState;
 use smithay_client_toolkit::output::OutputState;
 use smithay_client_toolkit::registry::RegistryState;
 use smithay_client_toolkit::shell::WaylandSurface;
-use smithay_client_toolkit::shell::wlr_layer::{LayerShell, LayerSurface};
+use smithay_client_toolkit::shell::wlr_layer::LayerShell;
 use smithay_client_toolkit::shm::Shm;
 use wayland_client::QueueHandle;
 use wayland_client::globals::GlobalList;
-use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_surface::WlSurface;
 
 use super::surface::Surface;
@@ -20,22 +19,22 @@ pub(super) struct State {
     compositor: CompositorState,
     layer_shell: LayerShell,
     pub(super) shm: Shm,
-    surfaces: Vec<Surface>,
-    config: Option<Config>,
+    pub(super) surfaces: Vec<Surface>,
+    config: Config,
 }
 
 impl State {
-    pub(super) fn bind(global_list: &GlobalList, queue_handle: &QueueHandle<Self>) -> Result<Self> {
+    pub(super) fn bind(global_list: &GlobalList, queue_handle: &QueueHandle<Self>, config: Config) -> Result<Self> {
         let registry_state = RegistryState::new(global_list);
         let output_state = OutputState::new(global_list, queue_handle);
         let compositor = CompositorState::bind(global_list, queue_handle).context("wl_compositor not available")?;
         let layer_shell = LayerShell::bind(global_list, queue_handle).context("zwlr_layer_shell_v1 not available")?;
         let shm = Shm::bind(global_list, queue_handle).context("wl_shm not available")?;
 
-        Ok(Self { registry_state, output_state, compositor, layer_shell, shm, surfaces: Vec::new(), config: None })
+        Ok(Self { registry_state, output_state, compositor, layer_shell, shm, surfaces: Vec::new(), config })
     }
 
-    fn find_surface_mut(&mut self, wl: &WlSurface) -> Option<&mut Surface> {
+    pub(super) fn find_surface_mut(&mut self, wl: &WlSurface) -> Option<&mut Surface> {
         self.surfaces.iter_mut().find(|s| s.layer_surface.wl_surface() == wl)
     }
 
@@ -55,86 +54,30 @@ impl State {
         }
     }
 
-    pub(super) fn apply_wallpaper(&mut self, config: Config, queue_handle: &QueueHandle<Self>) -> Result<()> {
-        if self.surfaces.is_empty() {
-            anyhow::bail!("no surfaces were configured by the compositor");
-        }
-
-        self.config = Some(config);
-        self.render_pending(queue_handle)
-    }
-
-    fn render_pending(&mut self, queue_handle: &QueueHandle<Self>) -> Result<()> {
-        let Some(config) = self.config.as_ref() else {
-            return Ok(());
-        };
-
-        let pending = self.surfaces.iter().filter(|s| s.needs_render()).count();
-        if pending == 0 {
+    pub(super) fn render_pending(&mut self, queue_handle: &QueueHandle<Self>) -> Result<()> {
+        let mut pending: Vec<&mut Surface> = self.surfaces.iter_mut().filter(|s| s.needs_render()).collect();
+        if pending.is_empty() {
             return Ok(());
         }
 
         tracing::info!(
-            outputs = pending,
-            image = %config.image.path.display(),
-            strategy = ?config.resize.strategy,
+            outputs = pending.len(),
+            image = %self.config.image.path.display(),
+            strategy = ?self.config.resize.strategy,
             "loading and resizing wallpaper"
         );
 
-        let image = Image::open(&config.image.path)?;
-        for surface in self.surfaces.iter_mut().filter(|s| s.needs_render()) {
-            surface.start_transition(&image, config, &self.shm, queue_handle)?;
+        let image = Image::open(&self.config.image.path)?;
+        for surface in pending.iter_mut() {
+            surface.start_transition(&image, &self.config, &self.shm, queue_handle)?;
         }
 
         Ok(())
     }
 
-    pub(super) fn handle_configure(&mut self, wl_surface: &WlSurface, new_size: (u32, u32), queue_handle: &QueueHandle<Self>) {
-        let Some(surface) = self.find_surface_mut(wl_surface) else {
-            return;
-        };
-
-        surface.configure(new_size);
+    pub(super) fn render(&mut self, queue_handle: &QueueHandle<Self>) {
         if let Err(e) = self.render_pending(queue_handle) {
             tracing::warn!(?e, "failed to apply pending wallpaper");
         }
-    }
-
-    pub(super) fn handle_frame_callback(&mut self, wl_surface: &WlSurface, queue_handle: &QueueHandle<Self>) {
-        let Some(surface) = self.find_surface_mut(wl_surface) else {
-            return;
-        };
-
-        if let Err(e) = surface.tick(queue_handle) {
-            tracing::warn!(?e, "failed to tick transition");
-        }
-    }
-
-    pub(super) fn handle_scale_changed(&mut self, wl_surface: &WlSurface, new_factor: i32, queue_handle: &QueueHandle<Self>) {
-        let Some(surface) = self.find_surface_mut(wl_surface) else {
-            return;
-        };
-
-        surface.rescale(new_factor);
-        if let Err(e) = self.render_pending(queue_handle) {
-            tracing::warn!(?e, "failed to apply pending wallpaper");
-        }
-    }
-
-    pub(super) fn handle_closed(&mut self, layer_surface: &LayerSurface) {
-        let wl_surface = layer_surface.wl_surface();
-        self.surfaces.retain(|s| s.layer_surface.wl_surface() != wl_surface);
-        tracing::info!("layer surface closed by compositor, releasing resources");
-    }
-
-    pub(super) fn handle_output_destroyed(&mut self, wl_output: &WlOutput) {
-        self.surfaces.retain(|s| {
-            if s.output == *wl_output {
-                s.destroy();
-                false
-            } else {
-                true
-            }
-        });
     }
 }
