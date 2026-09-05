@@ -47,7 +47,7 @@ That's it.
   services.ouranos = {
     enable = true;
     settings = {
-      image.path = "~/wallpapers/wallpaper.png";
+      image = "/absolute/path/to/wallpaper.png";
 
       transition = {
         transition_type = "fade";
@@ -99,8 +99,7 @@ target/release/ouranos
 Copy the binary somewhere on your PATH, then drop a config at `~/.config/ouranos/config.toml`:
 
 ```toml
-[image]
-path = "/path/to/wallpaper.png"
+image = "/path/to/wallpaper.png"
 ```
 
 Run it however you want.
@@ -109,13 +108,11 @@ Run it however you want.
 
 Location: `$XDG_CONFIG_HOME/ouranos/config.toml`
 
-Only `[image]` is required. Everything else has sensible defaults.
+Only `image` is required. Everything else has sensible defaults.
 
-### `[image]`
+### `image`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `path` | string | Path to the image. PNG, JPEG, WebP, GIF, BMP. |
+Absolute path to the image. PNG, JPEG, WebP, GIF, BMP.
 
 ### `[transition]`
 

@@ -22,7 +22,7 @@ in
       default = { };
       example = lib.literalExpression ''
         {
-          image.path = "~/wallpapers/wallpaper.png";
+          image = "/absolute/path/to/wallpaper.png";
         }
       '';
       description = ''

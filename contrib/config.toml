@@ -1,8 +1,7 @@
 # ouranos configuration
-# All fields shown here are optional except [image] path.
+# Only `image` is required.
 
-[image]
-path = "/absolute/path/to/wallpaper.png"
+image = "/absolute/path/to/wallpaper.png"
 
 [transition]
 transition_type = "fade"

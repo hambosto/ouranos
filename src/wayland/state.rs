@@ -62,12 +62,12 @@ impl State {
 
         tracing::info!(
             outputs = pending,
-            image = %self.config.image.path.display(),
+            image = %self.config.image.display(),
             strategy = ?self.config.resize.strategy,
             "loading and resizing wallpaper"
         );
 
-        let image = Image::open(&self.config.image.path)?;
+        let image = Image::open(&self.config.image)?;
         for surface in self.surfaces.iter_mut().filter(|s| matches!(s.status, Status::Pending)) {
             surface.start_transition(&image, &self.config, &self.shm, queue_handle)?;
         }

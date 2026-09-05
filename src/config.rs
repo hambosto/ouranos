@@ -13,7 +13,7 @@ const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Deserialize)]
 pub(crate) struct Config {
-    pub(crate) image: ImageConfig,
+    pub(crate) image: PathBuf,
     #[serde(default)]
     pub(crate) transition: TransitionConfig,
     #[serde(default)]
@@ -27,11 +27,6 @@ impl Config {
 
         Figment::from(Toml::file(&path)).extract().context("cannot parse config")
     }
-}
-
-#[derive(Deserialize)]
-pub(crate) struct ImageConfig {
-    pub(crate) path: PathBuf,
 }
 
 #[derive(Deserialize)]

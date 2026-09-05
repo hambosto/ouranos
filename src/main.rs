@@ -15,7 +15,7 @@ fn main() -> Result<()> {
 
     let config = Config::load().context("failed to load config")?;
     tracing::info!(
-        image = %config.image.path.display(),
+        image = %config.image.display(),
         transition = ?config.transition.transition_type,
         resize = ?config.resize.strategy,
         duration = config.transition.duration,
