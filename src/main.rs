@@ -4,12 +4,8 @@ mod transition;
 mod wayland;
 
 use anyhow::{Context, Result};
-use tikv_jemallocator::Jemalloc;
 
 use crate::config::Config;
-
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt().with_file(true).with_line_number(true).init();

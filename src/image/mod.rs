@@ -28,11 +28,14 @@ impl Image {
 
         let rgba = image.into_rgba8();
         tracing::info!(width = rgba.width(), height = rgba.height(), pixels = rgba.width() * rgba.height(), "wallpaper image decoded");
+
         Ok(Self { rgba })
     }
 
-    pub(crate) fn render(&self, width: u32, height: u32, dst: &mut [u8], resize: &ResizeConfig) -> Result<()> {
-        let resized = resize::apply(&self.rgba, width, height, resize)?;
-        garb::bytes::rgba_to_bgra(resized.as_raw(), dst).context("pixel format conversion failed")
+    pub(crate) fn render(&self, width: u32, height: u32, resize: &ResizeConfig) -> Result<Vec<u8>> {
+        let mut resized = resize::apply(&self.rgba, width, height, resize)?;
+        resized.pixels_mut().for_each(|px| px.0.swap(0, 2));
+
+        Ok(resized.into_raw())
     }
 }

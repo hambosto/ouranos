@@ -188,7 +188,6 @@ impl From<Filter> for FilterType {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TransitionType {
     None,
-    Simple,
     Fade,
     Wipe,
     Disc,

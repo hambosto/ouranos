@@ -10,7 +10,7 @@ use surface::Surface;
 use crate::config::{TransitionConfig, TransitionType};
 
 enum Phase {
-    Blit,
+    Snap,
     Running { effect: Box<dyn Effect>, duration: f32 },
 }
 
@@ -21,7 +21,7 @@ impl Phase {
         let animated = |effect: Box<dyn Effect>| Self::Running { effect, duration };
 
         match config.transition_type {
-            TransitionType::None | TransitionType::Simple => Self::Blit,
+            TransitionType::None => Self::Snap,
             TransitionType::Fade => animated(Box::new(Fade)),
             TransitionType::Wipe => animated(Box::new(Wipe::new(config.wipe.direction, smoothness))),
             TransitionType::Disc => animated(Box::new(Disc::new(config.disc.center_x, config.disc.center_y, smoothness, surface))),
@@ -59,13 +59,18 @@ impl Transition {
         let elapsed = self.start.elapsed().as_secs_f64();
 
         let done = match &self.phase {
-            Phase::Blit => {
+            Phase::Snap => {
                 canvas.copy_from_slice(&self.target);
                 true
             }
             Phase::Running { effect, duration } => {
-                effect.render(&self.surface, canvas, &self.target, math::progress(*duration, elapsed));
-                elapsed >= f64::from(*duration) && converge(canvas, &self.target)
+                if elapsed >= f64::from(*duration) {
+                    canvas.copy_from_slice(&self.target);
+                    true
+                } else {
+                    effect.render(&self.surface, canvas, &self.target, math::progress(*duration, elapsed));
+                    false
+                }
             }
         };
 
@@ -75,19 +80,4 @@ impl Transition {
 
         done
     }
-}
-
-fn converge(canvas: &mut [u8], target: &[u8]) -> bool {
-    debug_assert_eq!(canvas.len(), target.len());
-    let mut converged = true;
-
-    for (old, new) in canvas.chunks_exact_mut(4).zip(target.chunks_exact(4)) {
-        for (o, &n) in old.iter_mut().zip(new) {
-            let delta = 4.min(o.abs_diff(n));
-            *o = if *o > n { *o - delta } else { *o + delta };
-        }
-        converged &= old == new;
-    }
-
-    converged
 }

@@ -126,7 +126,7 @@ Only `[image]` is required. Everything else has sensible defaults.
 | `edge_smoothness` | float | `0.3` | Transition edge softness |
 | `transition_color` | hex | `#000000` | Start color (`#RGB` or `#RRGGBBAA`) |
 
-Available effects: `none`, `simple` (instant snap, same as `none`), `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`
+Available effects: `none` (instant snap), `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`
 
 ### `[transition.wipe]`
 

@@ -36,13 +36,6 @@ impl Surface {
         self.for_each_pixel(canvas, target, |u, v, old_px, new_px| mix_pixel(old_px, new_px, keep(u, v)));
     }
 
-    pub(crate) fn blend_flat(&self, canvas: &mut [u8], target: &[u8], keep: f32) {
-        debug_assert_eq!(canvas.len(), target.len());
-        for (old_px, new_px) in canvas.chunks_exact_mut(4).zip(target.chunks_exact(4)) {
-            mix_pixel(old_px, new_px, keep);
-        }
-    }
-
     #[must_use]
     pub(crate) fn sample(&self, buf: &[u8], x: f32, y: f32) -> [f32; 4] {
         debug_assert_eq!(buf.len(), self.width * 4 * self.height);

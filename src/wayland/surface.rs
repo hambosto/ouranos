@@ -14,18 +14,17 @@ use crate::config::{Config, TransitionType};
 use crate::image::Image;
 use crate::transition::Transition;
 
-enum Status {
+pub(super) enum Status {
     Unconfigured,
-    NeedsRender,
-    Transitioning(Box<Animation>),
+    Pending,
+    Transitioning(Animation),
     Complete,
 }
 
-struct Animation {
+pub(super) struct Animation {
     transition: Transition,
     pool: SlotPool,
     slot: Slot,
-    pixels: Vec<u8>,
     width: i32,
     height: i32,
     stride: i32,
@@ -33,27 +32,26 @@ struct Animation {
 
 impl Animation {
     fn new(image: &Image, config: &Config, shm: &Shm, width: u32, height: u32) -> Result<Self> {
-        let len = width.checked_mul(height).and_then(|pixels| pixels.checked_mul(4)).context("surface dimensions too large")? as usize;
-        let mut target = vec![0u8; len];
-        image.render(width, height, &mut target, &config.resize)?;
-
-        let mut pixels = vec![0u8; target.len()];
-        if !matches!(config.transition.transition_type, TransitionType::None) {
-            let color = config.transition.transition_color;
-            pixels.chunks_exact_mut(4).for_each(|px| px.copy_from_slice(&[color.b, color.g, color.r, 0xFF]));
-        }
+        width.checked_mul(height).and_then(|pixels| pixels.checked_mul(4)).context("surface dimensions too large")?;
+        let target = image.render(width, height, &config.resize)?;
 
         let pool_len = target.len().next_multiple_of(64);
         let mut pool = SlotPool::new(pool_len, shm).context("failed to create shm pool")?;
         let slot = pool.new_slot(target.len()).context("failed to allocate shm slot")?;
+
+        if !matches!(config.transition.transition_type, TransitionType::None)
+            && let Some(canvas) = slot.canvas(&mut pool)
+        {
+            let color = config.transition.transition_color;
+            canvas.chunks_exact_mut(4).for_each(|px| px.copy_from_slice(&[color.b, color.g, color.r, 0xFF]));
+        }
+
         let (width_i32, height_i32) = (width.cast_signed(), height.cast_signed());
 
-        Ok(Self { transition: Transition::new(&config.transition, (width, height), target), pool, slot, pixels, width: width_i32, height: height_i32, stride: width_i32.saturating_mul(4) })
+        Ok(Self { transition: Transition::new(&config.transition, (width, height), target), pool, slot, width: width_i32, height: height_i32, stride: width_i32.saturating_mul(4) })
     }
 
     fn present(&mut self, layer_surface: &LayerSurface, queue_handle: &QueueHandle<State>) -> Result<bool> {
-        let done = self.transition.frame(&mut self.pixels);
-
         let (width, height, stride) = (self.width, self.height, self.stride);
 
         let (buffer, canvas) = if self.slot.has_active_buffers() {
@@ -63,7 +61,7 @@ impl Animation {
             let canvas = buffer.canvas(&mut self.pool).context("shm slot busy")?;
             (buffer, canvas)
         };
-        canvas.copy_from_slice(&self.pixels);
+        let done = self.transition.frame(canvas);
 
         let wl_surface = layer_surface.wl_surface();
         wl_surface.frame(queue_handle, FrameCallbackData(wl_surface.clone()));
@@ -81,7 +79,7 @@ pub(super) struct Surface {
     width: u32,
     height: u32,
     scale: u32,
-    status: Status,
+    pub(super) status: Status,
 }
 
 impl Surface {
@@ -96,12 +94,13 @@ impl Surface {
                 .find(|mode| mode.current)
                 .map(|mode| ((mode.dimensions.0 / scale_factor).max(1), (mode.dimensions.1 / scale_factor).max(1)))
         });
+
         let Some((width, height)) = size else {
             tracing::warn!(name, "no valid dimensions, skipping output");
             return None;
         };
-        let scale = scale_factor.cast_unsigned();
 
+        let scale = scale_factor.cast_unsigned();
         let layer_surface = layer_shell.create_layer_surface(queue_handle, compositor.create_surface(queue_handle), Layer::Background, Some(env!("CARGO_PKG_NAME")), Some(&output));
         layer_surface.set_anchor(Anchor::all());
         layer_surface.set_exclusive_zone(-1);
@@ -119,18 +118,14 @@ impl Surface {
         Some(Self { layer_surface, output, width: width.cast_unsigned(), height: height.cast_unsigned(), scale, status: Status::Unconfigured })
     }
 
-    pub(super) fn needs_render(&self) -> bool {
-        matches!(self.status, Status::NeedsRender)
-    }
-
     pub(super) fn configure(&mut self, (new_width, new_height): (u32, u32)) {
         let resized = new_width > 0 && new_height > 0 && (new_width != self.width || new_height != self.height);
         if resized {
             tracing::info!(old_width = self.width, old_height = self.height, new_width, new_height, "compositor requested new surface size, resizing");
             (self.width, self.height) = (new_width, new_height);
-            self.status = Status::NeedsRender;
+            self.status = Status::Pending;
         } else if matches!(self.status, Status::Unconfigured) {
-            self.status = Status::NeedsRender;
+            self.status = Status::Pending;
         }
     }
 
@@ -147,12 +142,12 @@ impl Surface {
 
         tracing::info!(old_scale = self.scale, scale, "output scale changed, resizing");
         self.scale = scale;
-        self.status = Status::NeedsRender;
+        self.status = Status::Pending;
     }
 
     pub(super) fn start_transition(&mut self, image: &Image, config: &Config, shm: &Shm, queue_handle: &QueueHandle<State>) -> Result<()> {
         let animation = Animation::new(image, config, shm, self.width.saturating_mul(self.scale), self.height.saturating_mul(self.scale))?;
-        self.status = Status::Transitioning(Box::new(animation));
+        self.status = Status::Transitioning(animation);
         self.tick(queue_handle)
     }
 

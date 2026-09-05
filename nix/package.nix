@@ -3,7 +3,6 @@
   lib,
   pkg-config,
   rustPlatform,
-  rust-jemalloc-sys,
   libxkbcommon,
 }:
 let
@@ -31,17 +30,10 @@ rustPlatform.buildRustPackage (final: {
   };
 
   cargoLock.lockFile = ../Cargo.lock;
-
   doCheck = false;
 
-  buildInputs = [
-    libxkbcommon
-    rust-jemalloc-sys
-  ];
-
-  nativeBuildInputs = [
-    pkg-config
-  ];
+  buildInputs = [ libxkbcommon ];
+  nativeBuildInputs = [ pkg-config ];
 
   OURANOS_BUILD_VERSION = "unstable ${fmtDate self.lastModifiedDate} (commit ${self.rev or "dirty"})";
 

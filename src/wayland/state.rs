@@ -9,7 +9,7 @@ use wayland_client::QueueHandle;
 use wayland_client::globals::GlobalList;
 use wayland_client::protocol::wl_surface::WlSurface;
 
-use super::surface::Surface;
+use super::surface::{Status, Surface};
 use crate::config::Config;
 use crate::image::Image;
 
@@ -55,20 +55,20 @@ impl State {
     }
 
     pub(super) fn render_pending(&mut self, queue_handle: &QueueHandle<Self>) -> Result<()> {
-        let mut pending: Vec<&mut Surface> = self.surfaces.iter_mut().filter(|s| s.needs_render()).collect();
-        if pending.is_empty() {
+        let pending = self.surfaces.iter().filter(|s| matches!(s.status, Status::Pending)).count();
+        if pending == 0 {
             return Ok(());
         }
 
         tracing::info!(
-            outputs = pending.len(),
+            outputs = pending,
             image = %self.config.image.path.display(),
             strategy = ?self.config.resize.strategy,
             "loading and resizing wallpaper"
         );
 
         let image = Image::open(&self.config.image.path)?;
-        for surface in pending.iter_mut() {
+        for surface in self.surfaces.iter_mut().filter(|s| matches!(s.status, Status::Pending)) {
             surface.start_transition(&image, &self.config, &self.shm, queue_handle)?;
         }
 
