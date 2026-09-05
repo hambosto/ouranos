@@ -1,5 +1,3 @@
-use rand::{RngExt, rng};
-
 pub(crate) fn progress(duration: f32, elapsed: f64) -> f32 {
     if duration <= 0.0 {
         return 1.0;
@@ -36,12 +34,4 @@ pub(crate) fn max_corner_distance(origin: (f32, f32), aspect_ratio: f32) -> f32 
 pub(crate) fn dist((ax, ay): (f32, f32), (bx, by): (f32, f32)) -> f32 {
     let (dx, dy) = (ax - bx, ay - by);
     (dx * dx + dy * dy).sqrt()
-}
-
-pub(crate) fn random_center() -> f32 {
-    rng().random_range(0.2..0.8)
-}
-
-pub(crate) fn pick(value: f32, fallback: f32, generate: impl FnOnce() -> f32) -> f32 {
-    if value == fallback { generate() } else { value }
 }

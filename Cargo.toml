@@ -13,7 +13,6 @@ figment                = { version = "0.10.19", features = ["toml"] }
 garb                   = "0.2.8"
 hex_color              = { version = "3.0.0", features = ["serde"] }
 image                  = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
-rand                   = "0.10.2"
 serde                  = { version = "1.0.229", features = ["derive"] }
 smithay-client-toolkit = "0.21.1"
 tikv-jemallocator      = "0.7.0"

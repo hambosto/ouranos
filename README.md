@@ -28,7 +28,7 @@ That's it.
 
 - Wayland compositor with layer shell (Niri, Hyprland, Sway, etc.)
 - `WAYLAND_DISPLAY` set
-- Rust 1.85+ (2024 edition)
+- Rust 1.87+ (2024 edition)
 
 ## Install
 
@@ -115,7 +115,7 @@ Only `[image]` is required. Everything else has sensible defaults.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `path` | string | Path to the image. PNG, JPEG, WebP. |
+| `path` | string | Path to the image. PNG, JPEG, WebP, GIF, BMP. |
 
 ### `[transition]`
 
@@ -126,37 +126,35 @@ Only `[image]` is required. Everything else has sensible defaults.
 | `edge_smoothness` | float | `0.3` | Transition edge softness |
 | `transition_color` | hex | `#000000` | Start color (`#RGB` or `#RRGGBBAA`) |
 
-Available effects: `none`, `simple`, `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`
-
-> **Randomization:** When spatial parameters (wipe direction, disc center, stripes count/angle, honeycomb cell_size/center) are left at their default values, they are randomized per invocation. This provides variety without config changes.
+Available effects: `none`, `simple` (instant snap, same as `none`), `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`
 
 ### `[transition.wipe]`
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `direction` | float | `0.0` | 0=right, 1=left, 2=up, 3=down. Randomized when 0. |
+| `direction` | float | `0.0` | 0=right, 1=left, 2=up, 3=down. |
 
 ### `[transition.disc]`
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `center_x` | float | `0.5` | Horizontal origin (0.0–1.0). Randomized when 0.5. |
-| `center_y` | float | `0.5` | Vertical origin (0.0–1.0). Randomized when 0.5. |
+| `center_x` | float | `0.5` | Horizontal origin (0.0–1.0). |
+| `center_y` | float | `0.5` | Vertical origin (0.0–1.0). |
 
 ### `[transition.stripes]`
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `stripe_count` | float | `12.0` | Number of stripes. Randomized when 12. |
-| `angle` | float | `30.0` | Degrees. Randomized when 30. |
+| `stripe_count` | float | `12.0` | Number of stripes. |
+| `angle` | float | `30.0` | Degrees. |
 
 ### `[transition.honeycomb]`
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `cell_size` | float | `0.04` | Hex cell size. Randomized when 0.04. |
-| `center_x` | float | `0.5` | Horizontal origin. Randomized when 0.5. |
-| `center_y` | float | `0.5` | Vertical origin. Randomized when 0.5. |
+| `cell_size` | float | `0.04` | Hex cell size. |
+| `center_x` | float | `0.5` | Horizontal origin. |
+| `center_y` | float | `0.5` | Vertical origin. |
 
 ### `[resize]`
 
@@ -174,30 +172,28 @@ Reads config, connects to Wayland, creates a layer surface per output, renders t
 ```
 main.rs
   |
-  +-- Config::load()                    config.rs
+  +-- Config::load()                  config.rs
   |     reads $XDG_CONFIG_HOME/ouranos/config.toml
   |
-  +-- wayland::run(config)              wayland/mod.rs
+  +-- wayland::run(config)            wayland/mod.rs
+        |  connects, binds globals (compositor, layer-shell, shm, output),
+        |  creates calloop EventLoop + WaylandSource, runs it
         |
-        +-- setup()
-        |     binds Wayland globals (compositor, layer-shell, shm, output)
-        |     creates calloop EventLoop + WaylandSource
+        +-- handlers.rs               protocol glue (SCTK traits)
+        |     on new_output           -> State::create_surfaces()
+        |     on configure            -> Surface::configure() + render_or_warn()
+        |     on frame                -> Surface::tick()
+        |     on scale_factor_changed -> Surface::rescale() + render_or_warn()
+        |     on closed / output_destroyed -> drop surfaces
         |
-        +-- state.apply_wallpaper(config)
-        |     |
-        |     +-- create_surfaces()     for each output:
-        |     |     LayerSurface at Background layer, anchor=all
-        |     |
-        |     +-- render_pending()
-        |           Image::open()       image/mod.rs (decode + orient)
-        |           resize::apply()     image/resize.rs (crop/fit/stretch)
-        |           Surface::begin_transition()  wayland/surface.rs
-        |
-        +-- event_loop.run()
-              on new_output     -> create surfaces
-              on configure      -> render pending
-              on frame          -> tick transition animation
-              on output_destroyed -> clean up surfaces
+        +-- state.rs                  State: outputs, surfaces, config
+              render_pending()
+                Image::open()               image/mod.rs (decode + EXIF orient)
+                resize::apply()             image/resize.rs (no/crop/fit/stretch)
+                Surface::start_transition() wayland/surface.rs
+                  Animation { Transition, SHM SlotPool, pixels }
+                  present() per frame: tick transition, attach SHM buffer,
+                  damage, commit
 ```
 
 ## Multi-monitor
@@ -214,9 +210,10 @@ Creates one layer surface per connected output. Handles hot-plug: surfaces are c
 ## Troubleshooting
 
 - **WAYLAND_DISPLAY not set** — Not in a Wayland session.
-- **Failed to read config** — File missing or bad permissions.
-- **path does not exist** — Image path points to nothing.
-- **Failed to detect image format** — Not a supported image type.
+- **failed to find config file** — File missing or bad permissions.
+- **path is not a file** — Image path points to nothing.
+- **failed to detect image format** — Not a supported image type.
+- **no surfaces were configured by the compositor** — No outputs seen.
 - **Wallpaper doesn't show** — Compositor might not support layer shell, or another wallpaper process is running.
 
 ## License

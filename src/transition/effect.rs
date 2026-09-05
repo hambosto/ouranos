@@ -1,6 +1,4 @@
-use rand::{RngExt, rng};
-
-use super::math::{band_width, dist, max_corner_distance, pick, random_center, smooth_edge};
+use super::math::{band_width, dist, max_corner_distance, smooth_edge};
 use super::surface::Surface;
 
 pub(crate) trait Effect {
@@ -23,7 +21,7 @@ pub(crate) struct Wipe {
 
 impl Wipe {
     pub(crate) fn new(direction: f32, smoothness: f32) -> Self {
-        let direction = pick(direction, 0.0, || rng().random_range(0.0..4.0)) as u32;
+        let direction = direction as u32;
         Self { along_x: matches!(direction, 0 | 1), reversed: matches!(direction, 0 | 2), band: band_width(smoothness, 0.499) }
     }
 }
@@ -49,7 +47,7 @@ pub(crate) struct Disc {
 impl Disc {
     pub(crate) fn new(center_x: f32, center_y: f32, smoothness: f32, surface: &Surface) -> Self {
         let aspect_ratio = surface.aspect_ratio();
-        let center = (pick(center_x, 0.5, random_center) * aspect_ratio, pick(center_y, 0.5, random_center));
+        let center = (center_x * aspect_ratio, center_y);
         let band = band_width(smoothness, 0.499);
 
         Self { center, band, radius_max: max_corner_distance(center, aspect_ratio) + 2.0 * band }
@@ -74,8 +72,7 @@ pub(crate) struct Stripes {
 
 impl Stripes {
     pub(crate) fn new(stripe_count: f32, angle: f32, smoothness: f32, surface: &Surface) -> Self {
-        let stripe_count = pick(stripe_count, 12.0, || rng().random_range(4.0_f32..24.0).round()).max(1.0);
-        let angle = pick(angle, 30.0, || rng().random_range(0.0..360.0));
+        let stripe_count = stripe_count.max(1.0);
         let (sin_a, cos_a) = angle.to_radians().sin_cos();
         let aspect_ratio = surface.aspect_ratio();
 
@@ -116,8 +113,8 @@ pub(crate) struct Honeycomb {
 impl Honeycomb {
     pub(crate) fn new(cell_size: f32, center_x: f32, center_y: f32, smoothness: f32, surface: &Surface) -> Self {
         let aspect_ratio = surface.aspect_ratio();
-        let origin = (pick(center_x, 0.5, random_center) * aspect_ratio, pick(center_y, 0.5, random_center));
-        let cell_size = pick(cell_size, 0.04, || rng().random_range(0.02..0.06)).max(1e-6);
+        let origin = (center_x * aspect_ratio, center_y);
+        let cell_size = cell_size.max(1e-6);
         let band = band_width(smoothness, 0.499);
 
         Self { cell_size, origin, band, radius_max: max_corner_distance(origin, aspect_ratio) + 2.0 * band }
