@@ -18,14 +18,14 @@ pub(crate) fn run(config: Config) -> Result<()> {
     let queue_handle = event_queue.handle();
     let mut state = State::bind(&global_list, &queue_handle, config)?;
     event_queue.roundtrip(&mut state).context("roundtrip failed")?;
+    state.create_surfaces(&queue_handle);
 
     if state.surfaces.is_empty() {
         anyhow::bail!("no surfaces were configured by the compositor");
     }
 
     let mut event_loop = EventLoop::try_new().context("failed to create event loop")?;
-    let source = WaylandSource::new(connection, event_queue);
-    source.insert(event_loop.handle()).context("failed to insert wayland_source")?;
+    WaylandSource::new(connection, event_queue).insert(event_loop.handle()).context("failed to insert wayland_source")?;
 
     tracing::info!(pid = std::process::id(), "wallpaper daemon is running");
     event_loop.run(None, &mut state, |_| {}).context("event loop error")

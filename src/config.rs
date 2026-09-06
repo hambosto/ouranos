@@ -2,14 +2,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use fast_image_resize::FilterType;
-use figment::Figment;
-use figment::providers::{Format, Toml};
 use hex_color::HexColor;
 use serde::Deserialize;
 use xdg::BaseDirectories;
-
-const CONFIG_PREFIX: &str = "ouranos";
-const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Deserialize)]
 pub(crate) struct Config {
@@ -22,10 +17,11 @@ pub(crate) struct Config {
 
 impl Config {
     pub(crate) fn load() -> Result<Self> {
-        let path = BaseDirectories::with_prefix(CONFIG_PREFIX).find_config_file(CONFIG_FILE).context("failed to find config file")?;
+        let path = BaseDirectories::with_prefix("ouranos").find_config_file("config.toml").context("failed to find config file")?;
         tracing::info!(path = %path.display(), "reading configuration");
 
-        Figment::from(Toml::file(&path)).extract().context("cannot parse config")
+        let raw = std::fs::read_to_string(&path).context("cannot read config")?;
+        toml::from_str(&raw).context("cannot parse config")
     }
 }
 

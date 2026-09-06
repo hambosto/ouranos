@@ -26,17 +26,16 @@ impl OutputHandler for State {
         self.create_surfaces(queue_handle);
     }
 
-    fn update_output(&mut self, _: &Connection, _: &QueueHandle<Self>, _: WlOutput) {}
+    fn update_output(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, _: WlOutput) {
+        self.create_surfaces(queue_handle);
+    }
 
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, wl_output: WlOutput) {
-        self.surfaces.retain(|s| {
-            if s.output == wl_output {
-                s.destroy();
-                false
-            } else {
-                true
-            }
-        });
+        let before = self.surfaces.len();
+        self.surfaces.retain(|s| s.output != wl_output);
+        if self.surfaces.len() != before {
+            tracing::info!("wallpaper surface destroyed for disconnected output");
+        }
     }
 }
 
@@ -69,9 +68,11 @@ impl CompositorHandler for State {
 
 impl LayerShellHandler for State {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, layer_surface: &LayerSurface) {
-        let wl_surface = layer_surface.wl_surface();
-        self.surfaces.retain(|s| s.layer_surface.wl_surface() != wl_surface);
-        tracing::info!("layer surface closed by compositor, releasing resources");
+        let before = self.surfaces.len();
+        self.surfaces.retain(|s| s.layer_surface.wl_surface() != layer_surface.wl_surface());
+        if self.surfaces.len() != before {
+            tracing::info!("layer surface closed by compositor, releasing resources");
+        }
     }
 
     fn configure(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, layer_surface: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {

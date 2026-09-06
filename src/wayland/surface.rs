@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use smithay_client_toolkit::compositor::{CompositorState, FrameCallbackData};
 use smithay_client_toolkit::output::OutputInfo;
 use smithay_client_toolkit::shell::WaylandSurface;
-use smithay_client_toolkit::shell::wlr_layer::{Anchor, Layer, LayerShell, LayerSurface, SurfaceKind};
+use smithay_client_toolkit::shell::wlr_layer::{Anchor, Layer, LayerShell, LayerSurface};
 use smithay_client_toolkit::shm::Shm;
 use smithay_client_toolkit::shm::slot::{Slot, SlotPool};
 use wayland_client::QueueHandle;
@@ -35,8 +35,7 @@ impl Animation {
         width.checked_mul(height).and_then(|pixels| pixels.checked_mul(4)).context("surface dimensions too large")?;
         let target = image.render(width, height, &config.resize)?;
 
-        let pool_len = target.len().next_multiple_of(64);
-        let mut pool = SlotPool::new(pool_len, shm).context("failed to create shm pool")?;
+        let mut pool = SlotPool::new(target.len(), shm).context("failed to create shm pool")?;
         let slot = pool.new_slot(target.len()).context("failed to allocate shm slot")?;
 
         if !matches!(config.transition.transition_type, TransitionType::None)
@@ -55,7 +54,10 @@ impl Animation {
         let (width, height, stride) = (self.width, self.height, self.stride);
 
         let (buffer, canvas) = if self.slot.has_active_buffers() {
-            self.pool.create_buffer(width, height, stride, Format::Xrgb8888).context("failed to create buffer")?
+            let (buffer, canvas) = self.pool.create_buffer(width, height, stride, Format::Xrgb8888).context("failed to create buffer")?;
+            let exact = (height as usize).saturating_mul(stride as usize);
+            let canvas = canvas.get_mut(..exact).context("shm slot too small")?;
+            (buffer, canvas)
         } else {
             let buffer = self.pool.create_buffer_in(&self.slot, width, height, stride, Format::Xrgb8888).context("failed to create buffer")?;
             let canvas = buffer.canvas(&mut self.pool).context("shm slot busy")?;
@@ -88,14 +90,12 @@ impl Surface {
         let description = info.description.as_deref().unwrap_or("unknown");
         let scale_factor = info.scale_factor.max(1);
 
-        let size = info.logical_size.filter(|(w, h)| *w > 0 && *h > 0).or_else(|| {
+        let Some((width, height)) = info.logical_size.filter(|(w, h)| *w > 0 && *h > 0).or_else(|| {
             info.modes
                 .iter()
                 .find(|mode| mode.current)
                 .map(|mode| ((mode.dimensions.0 / scale_factor).max(1), (mode.dimensions.1 / scale_factor).max(1)))
-        });
-
-        let Some((width, height)) = size else {
+        }) else {
             tracing::warn!(name, "no valid dimensions, skipping output");
             return None;
         };
@@ -156,20 +156,18 @@ impl Surface {
             return Ok(());
         };
 
-        if animation.present(&self.layer_surface, queue_handle)? {
+        let done = match animation.present(&self.layer_surface, queue_handle) {
+            Ok(done) => done,
+            Err(e) => {
+                self.status = Status::Pending;
+                return Err(e);
+            }
+        };
+
+        if done {
             self.status = Status::Complete;
         }
 
         Ok(())
-    }
-
-    pub(super) fn destroy(&self) {
-        tracing::info!("wallpaper surface destroyed for disconnected output");
-
-        if let SurfaceKind::Wlr(layer_surface) = self.layer_surface.kind() {
-            layer_surface.destroy();
-        }
-
-        self.layer_surface.wl_surface().destroy();
     }
 }
