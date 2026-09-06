@@ -166,6 +166,11 @@ impl Surface {
 
         if done {
             self.status = Status::Complete;
+            // SAFETY: malloc_trim only releases unused heap pages back to the OS and never
+            // invalidates live allocations.
+            unsafe {
+                libc::malloc_trim(0);
+            }
         }
 
         Ok(())
