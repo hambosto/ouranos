@@ -42,7 +42,7 @@ impl Animation {
             && let Some(canvas) = slot.canvas(&mut pool)
         {
             let color = config.transition.transition_color;
-            canvas.chunks_exact_mut(4).for_each(|px| px.copy_from_slice(&[color.b, color.g, color.r, 0xFF]));
+            canvas.as_chunks_mut::<4>().0.iter_mut().for_each(|px| px.copy_from_slice(&[color.b, color.g, color.r, 0xFF]));
         }
 
         let (width_i32, height_i32) = (width.cast_signed(), height.cast_signed());

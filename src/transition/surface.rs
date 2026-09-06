@@ -26,7 +26,7 @@ impl Surface {
         for (row, (canvas_row, target_row)) in canvas.chunks_exact_mut(stride).zip(target.chunks_exact(stride)).enumerate() {
             let v = row as f32 * inv_h;
 
-            for (col, (canvas_px, target_px)) in canvas_row.chunks_exact_mut(4).zip(target_row.chunks_exact(4)).enumerate() {
+            for (col, (canvas_px, target_px)) in canvas_row.as_chunks_mut::<4>().0.iter_mut().zip(target_row.as_chunks::<4>().0).enumerate() {
                 paint(col as f32 * inv_w, v, canvas_px, target_px);
             }
         }
