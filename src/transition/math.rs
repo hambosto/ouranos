@@ -32,6 +32,5 @@ pub(crate) fn max_corner_distance(origin: (f32, f32), aspect_ratio: f32) -> f32 
 }
 
 pub(crate) fn dist((ax, ay): (f32, f32), (bx, by): (f32, f32)) -> f32 {
-    let (dx, dy) = (ax - bx, ay - by);
-    (dx * dx + dy * dy).sqrt()
+    (ax - bx).hypot(ay - by)
 }
