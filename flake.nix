@@ -60,8 +60,6 @@
             inherit (self.packages.${system}) ouranos;
           };
         };
-
-        formatter = pkgs.nixfmt-tree;
       }
     )
     // {
