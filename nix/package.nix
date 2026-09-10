@@ -1,33 +1,17 @@
 {
-  self,
+  date,
   lib,
-  pkg-config,
-  rustPlatform,
   libxkbcommon,
+  pkg-config,
+  rev ? "unknown",
+  rustPlatform,
+  version ? "git",
 }:
-let
-  fmtDate =
-    raw:
-    let
-      year = builtins.substring 0 4 raw;
-      month = builtins.substring 4 2 raw;
-      day = builtins.substring 6 2 raw;
-    in
-    "${year}-${month}-${day}";
-in
 rustPlatform.buildRustPackage (final: {
   pname = "ouranos";
-  version = "unstable-${fmtDate self.lastModifiedDate}-${self.shortRev or "dirty"}";
+  inherit version;
 
-  src = lib.cleanSourceWith {
-    filter =
-      name: _:
-      let
-        baseName = baseNameOf (toString name);
-      in
-      !(lib.hasSuffix ".nix" baseName);
-    src = lib.cleanSource ../.;
-  };
+  src = ../.;
 
   cargoLock.lockFile = ../Cargo.lock;
   doCheck = false;
@@ -35,7 +19,7 @@ rustPlatform.buildRustPackage (final: {
   buildInputs = [ libxkbcommon ];
   nativeBuildInputs = [ pkg-config ];
 
-  OURANOS_BUILD_VERSION = "unstable ${fmtDate self.lastModifiedDate} (commit ${self.rev or "dirty"})";
+  OURANOS_BUILD_VERSION = "unstable ${date} (commit ${rev})";
 
   meta = {
     description = "A Wayland wallpaper daemon with animated transitions.";

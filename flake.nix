@@ -3,53 +3,75 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay/stable";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
     {
       self,
       nixpkgs,
+      rust-overlay,
+      flake-utils,
+      ...
     }:
-    let
-      inherit (nixpkgs.lib) genAttrs;
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-      ];
-      forEachSystem =
-        perSystem:
-        genAttrs systems (
-          system:
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ rust-overlay.overlays.default ];
+        };
+        toolchain = pkgs.rust-bin.stable.latest.default;
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = toolchain;
+          rustc = toolchain;
+        };
+        fmtDate =
+          raw:
           let
-            pkgs = nixpkgs.legacyPackages.${system};
+            year = builtins.substring 0 4 raw;
+            month = builtins.substring 4 2 raw;
+            day = builtins.substring 6 2 raw;
           in
-          perSystem { inherit pkgs system; }
-        );
-    in
-    {
-      overlays.default = final: prev: {
-        ouranos = final.callPackage ./nix/package.nix { inherit self; };
-      };
-
-      packages = forEachSystem (
-        { pkgs, ... }: {
-          default = pkgs.callPackage ./nix/package.nix { inherit self; };
-        }
-      );
-
-      devShells = forEachSystem (
-        { pkgs, system }: {
-          default = pkgs.callPackage ./nix/shell.nix {
-            ouranos = self.packages.${system}.default;
+          "${year}-${month}-${day}";
+        rev = self.rev or "dirty";
+        date = fmtDate self.lastModifiedDate;
+        version = "unstable-${date}-${self.shortRev or "dirty"}";
+      in
+      {
+        packages = {
+          ouranos = pkgs.callPackage ./nix/package.nix {
+            inherit
+              date
+              rev
+              rustPlatform
+              version
+              ;
           };
-        }
-      );
+          default = self.packages.${system}.ouranos;
+        };
+
+        devShells = {
+          default = pkgs.callPackage ./nix/shell.nix {
+            inherit (self.packages.${system}) ouranos;
+          };
+        };
+
+        formatter = pkgs.nixfmt-tree;
+      }
+    )
+    // {
+      overlays.default = _: prev: {
+        inherit (self.packages.${prev.stdenv.system}) ouranos;
+      };
 
       homeManagerModules.default = { lib, pkgs, ... }: {
         imports = [ ./nix/home-module.nix ];
-        services.ouranos.package =
-          lib.mkDefault
-            self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        services.ouranos.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.default;
       };
     };
 }
