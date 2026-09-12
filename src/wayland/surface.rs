@@ -45,9 +45,9 @@ impl Animation {
             canvas.as_chunks_mut::<4>().0.iter_mut().for_each(|px| px.copy_from_slice(&[color.b, color.g, color.r, 0xFF]));
         }
 
-        let (width_i32, height_i32) = (width.cast_signed(), height.cast_signed());
+        let (width_signed, height_signed) = (width.cast_signed(), height.cast_signed());
 
-        Ok(Self { transition: Transition::new(&config.transition, (width, height), target), pool, slot, width: width_i32, height: height_i32, stride: width_i32.saturating_mul(4) })
+        Ok(Self { transition: Transition::new(&config.transition, (width, height), target), pool, slot, width: width_signed, height: height_signed, stride: width_signed.saturating_mul(4) })
     }
 
     fn present(&mut self, layer_surface: &LayerSurface, queue_handle: &QueueHandle<State>) -> Result<bool> {
@@ -63,9 +63,10 @@ impl Animation {
             let canvas = buffer.canvas(&mut self.pool).context("shm slot busy")?;
             (buffer, canvas)
         };
-        let done = self.transition.frame(canvas);
 
+        let done = self.transition.frame(canvas);
         let wl_surface = layer_surface.wl_surface();
+
         wl_surface.frame(queue_handle, FrameCallbackData(wl_surface.clone()));
         buffer.attach_to(wl_surface).context("failed to attach buffer")?;
         wl_surface.damage_buffer(0, 0, width, height);
@@ -102,27 +103,24 @@ impl Surface {
 
         let scale = scale_factor.cast_unsigned();
         let layer_surface = layer_shell.create_layer_surface(queue_handle, compositor.create_surface(queue_handle), Layer::Background, Some(env!("CARGO_PKG_NAME")), Some(&output));
+
         layer_surface.set_anchor(Anchor::all());
         layer_surface.set_exclusive_zone(-1);
         layer_surface.set_size(0, 0);
 
-        let scale = if layer_surface.set_buffer_scale(scale).is_err() {
-            tracing::warn!(name, scale, "compositor does not support buffer scaling, rendering at 1x");
-            1
-        } else {
-            scale
-        };
+        let scale = if layer_surface.set_buffer_scale(scale).is_err() { 1 } else { scale };
         layer_surface.commit();
+
         tracing::info!(name, description, width, height, scale, "monitor detected, creating wallpaper surface");
 
         Some(Self { layer_surface, output, width: width.cast_unsigned(), height: height.cast_unsigned(), scale, status: Status::Unconfigured })
     }
 
-    pub(super) fn configure(&mut self, (new_width, new_height): (u32, u32)) {
-        let resized = new_width > 0 && new_height > 0 && (new_width != self.width || new_height != self.height);
+    pub(super) fn configure(&mut self, (width, height): (u32, u32)) {
+        let resized = width > 0 && height > 0 && (width != self.width || height != self.height);
         if resized {
-            tracing::info!(old_width = self.width, old_height = self.height, new_width, new_height, "compositor requested new surface size, resizing");
-            (self.width, self.height) = (new_width, new_height);
+            tracing::info!(old_width = self.width, old_height = self.height, width, height, "compositor requested new surface size, resizing");
+            (self.width, self.height) = (width, height);
             self.status = Status::Pending;
         } else if matches!(self.status, Status::Unconfigured) {
             self.status = Status::Pending;
