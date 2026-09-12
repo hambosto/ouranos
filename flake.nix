@@ -4,17 +4,12 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay/stable";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
     {
       self,
       nixpkgs,
-      rust-overlay,
       flake-utils,
       ...
     }:
@@ -23,12 +18,6 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ rust-overlay.overlays.default ];
-        };
-        toolchain = pkgs.rust-bin.stable.latest.default;
-        rustPlatform = pkgs.makeRustPlatform {
-          cargo = toolchain;
-          rustc = toolchain;
         };
         fmtDate =
           raw:
@@ -48,7 +37,6 @@
             inherit
               date
               rev
-              rustPlatform
               version
               ;
           };
@@ -63,7 +51,7 @@
       }
     )
     // {
-      overlays.default = _: prev: {
+      overlays.default = final: prev: {
         inherit (self.packages.${prev.stdenv.system}) ouranos;
       };
 
