@@ -108,7 +108,12 @@ impl Surface {
         layer_surface.set_exclusive_zone(-1);
         layer_surface.set_size(0, 0);
 
-        let scale = if layer_surface.set_buffer_scale(scale).is_err() { 1 } else { scale };
+        let scale = if layer_surface.set_buffer_scale(scale).is_err() {
+            tracing::warn!(name, scale, "compositor does not support buffer scaling, rendering at 1x");
+            1
+        } else {
+            scale
+        };
         layer_surface.commit();
 
         tracing::info!(name, description, width, height, scale, "monitor detected, creating wallpaper surface");
