@@ -1,6 +1,5 @@
 use super::math::{band_width, dist, max_corner_distance, smooth_edge};
 use super::surface::Surface;
-
 use crate::config::TransitionType;
 
 #[derive(Clone, Copy)]
