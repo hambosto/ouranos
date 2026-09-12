@@ -31,72 +31,11 @@ pub(crate) struct TransitionConfig {
     pub(crate) duration: f32,
     pub(crate) edge_smoothness: f32,
     pub(crate) transition_color: HexColor,
-    pub(crate) wipe: WipeConfig,
-    pub(crate) disc: DiscConfig,
-    pub(crate) stripes: StripesConfig,
-    pub(crate) honeycomb: HoneycombConfig,
 }
 
 impl Default for TransitionConfig {
     fn default() -> Self {
-        Self {
-            transition_type: TransitionType::Fade,
-            duration: 1.5,
-            edge_smoothness: 0.3,
-            transition_color: HexColor::BLACK,
-            wipe: WipeConfig::default(),
-            disc: DiscConfig::default(),
-            stripes: StripesConfig::default(),
-            honeycomb: HoneycombConfig::default(),
-        }
-    }
-}
-
-#[derive(Deserialize)]
-pub(crate) struct WipeConfig {
-    pub(crate) direction: f32,
-}
-
-impl Default for WipeConfig {
-    fn default() -> Self {
-        Self { direction: 0.0 }
-    }
-}
-
-#[derive(Deserialize)]
-pub(crate) struct DiscConfig {
-    pub(crate) center_x: f32,
-    pub(crate) center_y: f32,
-}
-
-impl Default for DiscConfig {
-    fn default() -> Self {
-        Self { center_x: 0.5, center_y: 0.5 }
-    }
-}
-
-#[derive(Deserialize)]
-pub(crate) struct StripesConfig {
-    pub(crate) stripe_count: f32,
-    pub(crate) angle: f32,
-}
-
-impl Default for StripesConfig {
-    fn default() -> Self {
-        Self { stripe_count: 12.0, angle: 30.0 }
-    }
-}
-
-#[derive(Deserialize)]
-pub(crate) struct HoneycombConfig {
-    pub(crate) cell_size: f32,
-    pub(crate) center_x: f32,
-    pub(crate) center_y: f32,
-}
-
-impl Default for HoneycombConfig {
-    fn default() -> Self {
-        Self { cell_size: 0.04, center_x: 0.5, center_y: 0.5 }
+        Self { transition_type: TransitionType::Fade, duration: 1.5, edge_smoothness: 0.3, transition_color: HexColor::BLACK }
     }
 }
 
@@ -175,7 +114,7 @@ impl From<Filter> for FilterType {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TransitionType {
     None,

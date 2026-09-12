@@ -10,14 +10,14 @@ use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_shm::Format;
 
 use super::state::State;
-use crate::config::{Config, TransitionType};
+use crate::config::Config;
 use crate::image::Image;
 use crate::transition::Transition;
 
 pub(super) enum Status {
     Unconfigured,
     Pending,
-    Transitioning(Animation),
+    Transitioning(Box<Animation>),
     Complete,
 }
 
@@ -37,14 +37,6 @@ impl Animation {
 
         let mut pool = SlotPool::new(target.len(), shm).context("failed to create shm pool")?;
         let slot = pool.new_slot(target.len()).context("failed to allocate shm slot")?;
-
-        if !matches!(config.transition.transition_type, TransitionType::None)
-            && let Some(canvas) = slot.canvas(&mut pool)
-        {
-            let color = config.transition.transition_color;
-            canvas.as_chunks_mut::<4>().0.iter_mut().for_each(|px| px.copy_from_slice(&[color.b, color.g, color.r, 0xFF]));
-        }
-
         let (width_signed, height_signed) = (width.cast_signed(), height.cast_signed());
 
         Ok(Self { transition: Transition::new(&config.transition, (width, height), target), pool, slot, width: width_signed, height: height_signed, stride: width_signed.saturating_mul(4) })
@@ -150,7 +142,7 @@ impl Surface {
 
     pub(super) fn start_transition(&mut self, image: &Image, config: &Config, shm: &Shm, queue_handle: &QueueHandle<State>) -> Result<()> {
         let animation = Animation::new(image, config, shm, self.width.saturating_mul(self.scale), self.height.saturating_mul(self.scale))?;
-        self.status = Status::Transitioning(animation);
+        self.status = Status::Transitioning(Box::new(animation));
         self.tick(queue_handle)
     }
 

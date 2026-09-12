@@ -54,24 +54,6 @@ That's it.
         duration = 1.5;
         edge_smoothness = 0.3;
         transition_color = "#000000";
-
-        wipe.direction = 0.0;
-
-        disc = {
-          center_x = 0.5;
-          center_y = 0.5;
-        };
-
-        stripes = {
-          stripe_count = 12.0;
-          angle = 30.0;
-        };
-
-        honeycomb = {
-          cell_size = 0.04;
-          center_x = 0.5;
-          center_y = 0.5;
-        };
       };
 
       resize = {
@@ -125,33 +107,7 @@ Absolute path to the image. PNG, JPEG, WebP, GIF, BMP.
 
 Available effects: `none` (instant snap), `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`
 
-### `[transition.wipe]`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `direction` | float | `0.0` | 0=right, 1=left, 2=up, 3=down. |
-
-### `[transition.disc]`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `center_x` | float | `0.5` | Horizontal origin (0.0–1.0). |
-| `center_y` | float | `0.5` | Vertical origin (0.0–1.0). |
-
-### `[transition.stripes]`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `stripe_count` | float | `12.0` | Number of stripes. |
-| `angle` | float | `30.0` | Degrees. |
-
-### `[transition.honeycomb]`
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `cell_size` | float | `0.04` | Hex cell size. |
-| `center_x` | float | `0.5` | Horizontal origin. |
-| `center_y` | float | `0.5` | Vertical origin. |
+Per-effect params (wipe direction, disc/honeycomb center, stripe count/angle, honeycomb cell size) are randomized every run.
 
 ### `[resize]`
 
