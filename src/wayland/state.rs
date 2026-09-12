@@ -54,10 +54,10 @@ impl State {
         }
     }
 
-    pub(super) fn render_pending(&mut self, queue_handle: &QueueHandle<Self>) -> Result<()> {
+    pub(super) fn render(&mut self, queue_handle: &QueueHandle<Self>) {
         let pending = self.surfaces.iter().filter(|s| matches!(s.status, Status::Pending)).count();
         if pending == 0 {
-            return Ok(());
+            return;
         }
 
         tracing::info!(
@@ -67,17 +67,18 @@ impl State {
             "loading and resizing wallpaper"
         );
 
-        let image = Image::open(&self.config.image)?;
+        let image = match Image::open(&self.config.image) {
+            Ok(image) => image,
+            Err(e) => {
+                tracing::warn!(?e, "failed to apply pending wallpaper");
+                return;
+            }
+        };
+
         for surface in self.surfaces.iter_mut().filter(|s| matches!(s.status, Status::Pending)) {
-            surface.start_transition(&image, &self.config, &self.shm, queue_handle)?;
-        }
-
-        Ok(())
-    }
-
-    pub(super) fn render(&mut self, queue_handle: &QueueHandle<Self>) {
-        if let Err(e) = self.render_pending(queue_handle) {
-            tracing::warn!(?e, "failed to apply pending wallpaper");
+            surface
+                .start_transition(&image, &self.config, &self.shm, queue_handle)
+                .unwrap_or_else(|e| tracing::warn!(?e, "failed to start transition for output"));
         }
     }
 }

@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
-use smithay_client_toolkit::compositor::{CompositorState, FrameCallbackData};
+use smithay_client_toolkit::compositor::{CompositorState, FrameCallbackData, Region};
 use smithay_client_toolkit::output::OutputInfo;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::wlr_layer::{Anchor, Layer, LayerShell, LayerSurface};
 use smithay_client_toolkit::shm::Shm;
-use smithay_client_toolkit::shm::slot::{Slot, SlotPool};
+use smithay_client_toolkit::shm::slot::SlotPool;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_shm::Format;
@@ -24,7 +24,6 @@ pub(super) enum Status {
 pub(super) struct Animation {
     transition: Transition,
     pool: SlotPool,
-    slot: Slot,
     width: i32,
     height: i32,
     stride: i32,
@@ -35,33 +34,27 @@ impl Animation {
         width.checked_mul(height).and_then(|pixels| pixels.checked_mul(4)).context("surface dimensions too large")?;
         let target = image.render(width, height, &config.resize)?;
 
-        let mut pool = SlotPool::new(target.len(), shm).context("failed to create shm pool")?;
-        let slot = pool.new_slot(target.len()).context("failed to allocate shm slot")?;
+        let pool = SlotPool::new(target.len(), shm).context("failed to create shm pool")?;
         let (width_signed, height_signed) = (width.cast_signed(), height.cast_signed());
 
-        Ok(Self { transition: Transition::new(&config.transition, (width, height), target), pool, slot, width: width_signed, height: height_signed, stride: width_signed.saturating_mul(4) })
+        Ok(Self { transition: Transition::new(&config.transition, (width, height), target), pool, width: width_signed, height: height_signed, stride: width_signed.saturating_mul(4) })
     }
 
     fn present(&mut self, layer_surface: &LayerSurface, queue_handle: &QueueHandle<State>) -> Result<bool> {
         let (width, height, stride) = (self.width, self.height, self.stride);
+        let (buffer, canvas) = self.pool.create_buffer(width, height, stride, Format::Xrgb8888).context("failed to create buffer")?;
 
-        let (buffer, canvas) = if self.slot.has_active_buffers() {
-            let (buffer, canvas) = self.pool.create_buffer(width, height, stride, Format::Xrgb8888).context("failed to create buffer")?;
-            let exact = (height as usize).saturating_mul(stride as usize);
-            let canvas = canvas.get_mut(..exact).context("shm slot too small")?;
-            (buffer, canvas)
-        } else {
-            let buffer = self.pool.create_buffer_in(&self.slot, width, height, stride, Format::Xrgb8888).context("failed to create buffer")?;
-            let canvas = buffer.canvas(&mut self.pool).context("shm slot busy")?;
-            (buffer, canvas)
-        };
-
+        let exact = (height as usize).saturating_mul(stride as usize);
+        let canvas = canvas.get_mut(..exact).context("shm slot too small")?;
         let done = self.transition.frame(canvas);
         let wl_surface = layer_surface.wl_surface();
-
-        wl_surface.frame(queue_handle, FrameCallbackData(wl_surface.clone()));
-        buffer.attach_to(wl_surface).context("failed to attach buffer")?;
         wl_surface.damage_buffer(0, 0, width, height);
+
+        if !done {
+            wl_surface.frame(queue_handle, FrameCallbackData(wl_surface.clone()));
+        }
+
+        buffer.attach_to(wl_surface).context("failed to attach buffer")?;
         layer_surface.commit();
 
         Ok(done)
@@ -100,12 +93,11 @@ impl Surface {
         layer_surface.set_exclusive_zone(-1);
         layer_surface.set_size(0, 0);
 
-        let scale = if layer_surface.set_buffer_scale(scale).is_err() {
-            tracing::warn!(name, scale, "compositor does not support buffer scaling, rendering at 1x");
-            1
-        } else {
-            scale
-        };
+        if let Ok(region) = Region::new(compositor) {
+            layer_surface.set_input_region(Some(region.wl_region()));
+        }
+
+        let scale = layer_surface.set_buffer_scale(scale).map(|()| scale).unwrap_or(1);
         layer_surface.commit();
 
         tracing::info!(name, description, width, height, scale, "monitor detected, creating wallpaper surface");

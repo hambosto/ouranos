@@ -56,9 +56,7 @@ impl CompositorHandler for State {
             return;
         };
 
-        if let Err(e) = surface.tick(queue_handle) {
-            tracing::warn!(?e, "failed to tick transition");
-        }
+        surface.tick(queue_handle).unwrap_or_else(|e| tracing::warn!(?e, "failed to tick transition"));
     }
 
     fn surface_enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: &WlOutput) {}
