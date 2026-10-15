@@ -124,4 +124,9 @@ pub(crate) enum TransitionType {
     Stripes,
     Zoom,
     Honeycomb,
+    Vortex,
+    Pixel,
+    Diamond,
+    Golden,
+    Melt,
 }

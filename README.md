@@ -105,7 +105,7 @@ Absolute path to the image. PNG, JPEG, WebP, GIF, BMP.
 | `edge_smoothness` | float | `0.3` | Transition edge softness |
 | `transition_color` | hex | `#000000` | Start color (`#RGB` or `#RRGGBBAA`) |
 
-Available effects: `none` (instant snap), `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`
+Available effects: `none` (instant snap), `fade`, `wipe`, `disc`, `stripes`, `zoom`, `honeycomb`, `vortex`, `pixel`, `diamond`, `golden`, `melt`
 
 Per-effect params (wipe direction, disc/honeycomb center, stripe count/angle, honeycomb cell size) are randomized every run.
 
