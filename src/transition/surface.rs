@@ -19,6 +19,8 @@ impl Surface {
         }
 
         let stride = self.width * 4;
+        assert_eq!(canvas.len(), target.len(), "canvas/target length mismatch");
+        assert_eq!(canvas.len(), stride * self.height, "canvas size mismatch for surface dimensions");
         let (inv_w, inv_h) = (1.0 / self.width as f32, 1.0 / self.height as f32);
 
         for (row, (canvas_row, target_row)) in canvas.chunks_exact_mut(stride).zip(target.chunks_exact(stride)).enumerate() {
@@ -35,7 +37,7 @@ impl Surface {
             let k = keep(u, v);
             let show = 1.0 - k;
             for ((o, &a), &n) in px.iter_mut().zip(&from).zip(new_px) {
-                *o = (n as f32 * show + a as f32 * k + 0.5) as u8;
+                *o = (f32::from(n) * show + f32::from(a) * k).round().clamp(0.0, 255.0) as u8;
             }
         });
     }

@@ -4,6 +4,8 @@ use super::math::{band_width, dist, max_corner_distance, smooth_edge};
 use super::surface::Surface;
 use crate::config::TransitionType;
 
+const GOLDEN_SPIRAL_TIGHTNESS: f32 = 0.306_349;
+
 #[derive(Clone, Copy)]
 pub(crate) enum Effect {
     Snap,
@@ -110,7 +112,7 @@ impl Effect {
 
                     let stripe = along.floor();
                     let fraction = along - stripe;
-                    let odd = (stripe as i32 % 2) != 0;
+                    let odd = (stripe % 2.0) != 0.0;
 
                     let delay = perpendicular.abs() * 0.3;
                     let local = ((progress - delay) / (1.0 - delay)).clamp(0.0, 1.0);
@@ -162,7 +164,7 @@ impl Effect {
                 surface.for_each_pixel(canvas, target, |u, v, px, _| {
                     let sampled = surface.sample(target, ((u - 0.5) / scale + 0.5) * max_x, ((v - 0.5) / scale + 0.5) * max_y);
                     for ((o, &a), &s) in px.iter_mut().zip(&from).zip(&sampled) {
-                        *o = (a as f32 * keep + s * progress + 0.5) as u8;
+                        *o = (f32::from(a) * keep + s * progress).round().clamp(0.0, 255.0) as u8;
                     }
                 });
             }
@@ -223,7 +225,7 @@ impl Effect {
                     let phase = angle + progress * TAU;
                     let diff = theta - phase;
                     let delta_theta = diff - (diff / TAU).floor() * TAU;
-                    let golden_dist = (distance / denom) * (-0.306349 * delta_theta).exp();
+                    let golden_dist = (distance / denom) * (-GOLDEN_SPIRAL_TIGHTNESS * delta_theta).exp();
                     smooth_edge(golden_dist, edge, feather)
                 });
             }

@@ -20,7 +20,7 @@ pub(crate) fn run(config: Config) -> Result<()> {
     state.create_surfaces(&queue_handle);
 
     if state.surfaces.is_empty() {
-        anyhow::bail!("no surfaces were configured by the compositor");
+        tracing::warn!("no surfaces were configured by the compositor yet, waiting for hotplug");
     }
 
     let mut event_loop = EventLoop::try_new().context("failed to create event loop")?;

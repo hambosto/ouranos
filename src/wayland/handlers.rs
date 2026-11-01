@@ -9,6 +9,7 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, QueueHandle};
 
 use super::state::State;
+use super::surface::Status;
 
 impl ProvidesRegistryState for State {
     fn registry(&mut self) -> &mut RegistryState {
@@ -49,14 +50,40 @@ impl CompositorHandler for State {
         self.render(queue_handle);
     }
 
-    fn transform_changed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: Transform) {}
+    fn transform_changed(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, wl_surface: &WlSurface, _: Transform) {
+        let output = match self.find_surface_mut(wl_surface) {
+            Some(surface) => surface.output.clone(),
+            None => return,
+        };
+        let new_size = self
+            .output_state
+            .info(&output)
+            .and_then(|info| info.logical_size)
+            .filter(|(w, h)| *w > 0 && *h > 0)
+            .map(|(w, h)| (w.cast_unsigned(), h.cast_unsigned()));
 
-    fn frame(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, wl_surface: &WlSurface, _: u32) {
         let Some(surface) = self.find_surface_mut(wl_surface) else {
             return;
         };
 
-        surface.tick(queue_handle).unwrap_or_else(|e| tracing::warn!(?e, "failed to tick transition"));
+        if let Some(size) = new_size {
+            surface.configure(size);
+        } else {
+            surface.status = Status::Pending;
+        }
+        self.render(queue_handle);
+    }
+
+    fn frame(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, wl_surface: &WlSurface, _: u32) {
+        let tick_error = match self.find_surface_mut(wl_surface) {
+            Some(surface) => surface.tick(queue_handle).err(),
+            None => return,
+        };
+
+        if let Some(e) = tick_error {
+            tracing::warn!(?e, "failed to tick transition, will retry on next render");
+            self.render(queue_handle);
+        }
     }
 
     fn surface_enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: &WlOutput) {}

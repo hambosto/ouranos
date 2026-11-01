@@ -20,27 +20,26 @@ pub(crate) struct Transition {
 
 impl Transition {
     pub(crate) fn new(config: &TransitionConfig, dimensions: (u32, u32), target: Vec<u8>) -> Self {
+        let expected = (u64::from(dimensions.0) * u64::from(dimensions.1) * 4) as usize;
+        assert_eq!(target.len(), expected, "target buffer size mismatch for transition dimensions");
+
+        let duration = if config.duration.is_finite() && config.duration >= 0.0 { config.duration } else { 1.5 };
+        let smoothness = if config.edge_smoothness.is_finite() { config.edge_smoothness.clamp(0.0, 1.0) } else { 0.3 };
+
         tracing::info!(
             transition_type = ?config.transition_type,
-            duration = config.duration,
+            duration = duration,
             width = dimensions.0,
             height = dimensions.1,
             pixels = u64::from(dimensions.0) * u64::from(dimensions.1),
-            smoothness = config.edge_smoothness,
+            smoothness = smoothness,
             "applying transition effect"
         );
 
         let surface = Surface::new(dimensions);
         let color = config.transition_color;
 
-        Self {
-            effect: Effect::select(config.transition_type, config.edge_smoothness, &surface, dimensions),
-            surface,
-            target,
-            from: [color.b, color.g, color.r, 0xFF],
-            duration: config.duration,
-            start: Instant::now(),
-        }
+        Self { effect: Effect::select(config.transition_type, smoothness, &surface, dimensions), surface, target, from: [color.b, color.g, color.r, 0xFF], duration, start: Instant::now() }
     }
 
     pub(crate) fn frame(&self, canvas: &mut [u8]) -> bool {

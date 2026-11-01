@@ -31,6 +31,9 @@ pub(super) struct Animation {
 
 impl Animation {
     fn new(image: &Image, config: &Config, shm: &Shm, width: u32, height: u32) -> Result<Self> {
+        if width > i32::MAX as u32 || height > i32::MAX as u32 {
+            anyhow::bail!("surface dimensions too large");
+        }
         width.checked_mul(height).and_then(|pixels| pixels.checked_mul(4)).context("surface dimensions too large")?;
         let target = image.render(width, height, &config.resize)?;
 
@@ -44,7 +47,9 @@ impl Animation {
         let (width, height, stride) = (self.width, self.height, self.stride);
         let (buffer, canvas) = self.pool.create_buffer(width, height, stride, Format::Xrgb8888).context("failed to create buffer")?;
 
-        let exact = (height as usize).saturating_mul(stride as usize);
+        let rows = usize::try_from(height).context("negative surface height")?;
+        let row_bytes = usize::try_from(stride).context("negative stride")?;
+        let exact = rows.saturating_mul(row_bytes);
         let canvas = canvas.get_mut(..exact).context("shm slot too small")?;
         let done = self.transition.frame(canvas);
         let wl_surface = layer_surface.wl_surface();
@@ -95,9 +100,11 @@ impl Surface {
 
         if let Ok(region) = Region::new(compositor) {
             layer_surface.set_input_region(Some(region.wl_region()));
+        } else {
+            tracing::warn!(name, "failed to create input region, surface may take input");
         }
 
-        let scale = layer_surface.set_buffer_scale(scale).map(|()| scale).unwrap_or(1);
+        let scale = layer_surface.set_buffer_scale(scale).map_or(1, |()| scale);
         layer_surface.commit();
 
         tracing::info!(name, description, width, height, scale, "monitor detected, creating wallpaper surface");
@@ -155,6 +162,7 @@ impl Surface {
             self.status = Status::Complete;
             // SAFETY: malloc_trim only releases unused heap pages back to the OS and never
             // invalidates live allocations.
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
             unsafe {
                 libc::malloc_trim(0);
             }

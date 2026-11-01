@@ -55,13 +55,11 @@ impl State {
     }
 
     pub(super) fn render(&mut self, queue_handle: &QueueHandle<Self>) {
-        let pending = self.surfaces.iter().filter(|s| matches!(s.status, Status::Pending)).count();
-        if pending == 0 {
+        if !self.surfaces.iter().any(|s| matches!(s.status, Status::Pending)) {
             return;
         }
 
         tracing::info!(
-            outputs = pending,
             image = %self.config.image.display(),
             strategy = ?self.config.resize.strategy,
             "loading and resizing wallpaper"
