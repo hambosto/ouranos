@@ -1,6 +1,3 @@
-# ouranos configuration
-# Only `image` is required.
-
 image = "/absolute/path/to/wallpaper.png"
 
 [transition]
