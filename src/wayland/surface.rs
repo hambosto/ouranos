@@ -7,44 +7,32 @@ use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_surface::WlSurface;
 
-use super::frame::SurfaceFrame;
+use super::frame::Frame;
 use super::state::State;
 use crate::config::Config;
 use crate::image::Image;
 
-pub(super) struct Unconfigured;
-pub(super) struct Pending;
-pub(super) struct Ready;
-pub(super) struct Animating {
-    frame: SurfaceFrame,
+pub(super) enum SurfaceStatus {
+    Unconfigured,
+    Pending,
+    Animating { frame: Frame },
+    Ready,
 }
 
-struct SurfaceData {
-    layer: LayerSurface,
-    output: WlOutput,
-    logical_width: u32,
-    logical_height: u32,
-    scale_factor: u32,
+pub(super) struct Surface {
+    layer_surface: LayerSurface,
+    wl_output: WlOutput,
+    logical_size: (u32, u32),
+    buffer_scale: u32,
+    status: SurfaceStatus,
 }
 
-pub(super) struct Surface<Stage> {
-    data: SurfaceData,
-    stage: Stage,
-}
-
-pub(super) enum ManagedSurface {
-    Unconfigured(Surface<Unconfigured>),
-    Pending(Surface<Pending>),
-    Animating(Surface<Animating>),
-    Ready(Surface<Ready>),
-}
-
-impl Surface<Unconfigured> {
-    pub(super) fn new(compositor: &CompositorState, layer_shell: &LayerShell, output: WlOutput, info: &OutputInfo, queue_handle: &QueueHandle<State>) -> Option<Self> {
+impl Surface {
+    pub(super) fn new(compositor_state: &CompositorState, layer_shell: &LayerShell, output: WlOutput, info: &OutputInfo, qh: &QueueHandle<State>) -> Option<Self> {
         let name = info.name.as_deref().unwrap_or("unknown");
         let description = info.description.as_deref().unwrap_or("unknown");
 
-        let Some((logical_width, logical_height)) = info
+        let Some(logical_size) = info
             .logical_size
             .filter(|(width, height)| *width > 0 && *height > 0)
             .map(|(width, height)| (width.cast_unsigned(), height.cast_unsigned()))
@@ -61,219 +49,128 @@ impl Surface<Unconfigured> {
         };
 
         let requested_scale: u32 = info.scale_factor.max(1).cast_unsigned();
-        let wl_surface = compositor.create_surface(queue_handle);
-        let layer = layer_shell.create_layer_surface(queue_handle, wl_surface, Layer::Background, Some(env!("CARGO_PKG_NAME")), Some(&output));
+        let surface = compositor_state.create_surface(qh);
+        let layer_surface = layer_shell.create_layer_surface(qh, surface, Layer::Background, Some(env!("CARGO_PKG_NAME")), Some(&output));
 
-        layer.set_anchor(Anchor::all());
-        layer.set_exclusive_zone(-1);
-        layer.set_size(0, 0);
-        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        layer_surface.set_anchor(Anchor::all());
+        layer_surface.set_exclusive_zone(-1);
+        layer_surface.set_size(0, 0);
+        layer_surface.set_keyboard_interactivity(KeyboardInteractivity::None);
 
-        if let Ok(region) = Region::new(compositor) {
-            layer.set_input_region(Some(region.wl_region()));
+        if let Ok(region) = Region::new(compositor_state) {
+            layer_surface.set_input_region(Some(region.wl_region()));
         } else {
             tracing::warn!(name, "failed to create input region, surface may take input");
         }
 
-        let applied_scale = layer.set_buffer_scale(requested_scale).map_or(1, |()| requested_scale);
-        layer.commit();
+        let applied_scale = layer_surface.set_buffer_scale(requested_scale).map_or(1, |()| requested_scale);
+        layer_surface.commit();
 
-        tracing::info!(name, description, logical_width, logical_height, applied_scale, "monitor detected, creating wallpaper surface");
-
-        Some(Self { data: SurfaceData { layer, output, logical_width, logical_height, scale_factor: applied_scale }, stage: Unconfigured })
-    }
-
-    pub(super) fn configure(self, logical_size: (u32, u32)) -> ManagedSurface {
-        let mut data = self.data;
         let (logical_width, logical_height) = logical_size;
-        if logical_width > 0 && logical_height > 0 && (logical_width != data.logical_width || logical_height != data.logical_height) {
-            tracing::info!(old_width = data.logical_width, old_height = data.logical_height, logical_width, logical_height, "compositor requested new surface size, resizing");
-            (data.logical_width, data.logical_height) = (logical_width, logical_height);
-        }
-        ManagedSurface::Pending(Surface { data, stage: Pending })
-    }
-}
+        tracing::info!(name, description, logical_width, logical_height, applied_scale, "monitor detected, creating output surface");
 
-impl Surface<Pending> {
-    pub(super) fn start_transition(self, image: &Image, config: &Config, shm: &Shm, queue_handle: &QueueHandle<State>) -> ManagedSurface {
-        let Some(buffer_width) = self.data.logical_width.checked_mul(self.data.scale_factor) else {
-            tracing::warn!("surface dimensions too large");
-            return ManagedSurface::Pending(self);
-        };
-        let Some(buffer_height) = self.data.logical_height.checked_mul(self.data.scale_factor) else {
-            tracing::warn!("surface dimensions too large");
-            return ManagedSurface::Pending(self);
-        };
-        let frame = match SurfaceFrame::new(image, config, shm, buffer_width, buffer_height) {
-            Ok(frame) => frame,
-            Err(e) => {
-                tracing::warn!(?e, "failed to start transition for output");
-                return ManagedSurface::Pending(self);
-            }
-        };
-        Surface { data: self.data, stage: Animating { frame } }.advance_frame(queue_handle)
+        Some(Self { layer_surface, wl_output: output, logical_size, buffer_scale: applied_scale, status: SurfaceStatus::Unconfigured })
     }
-}
 
-impl Surface<Animating> {
-    pub(super) fn advance_frame(self, queue_handle: &QueueHandle<State>) -> ManagedSurface {
-        let Surface { data, stage } = self;
-        let mut frame = stage.frame;
-        match frame.commit(&data.layer, queue_handle) {
-            Ok(true) => ManagedSurface::Ready(Surface { data, stage: Ready }),
-            Ok(false) => ManagedSurface::Animating(Surface { data, stage: Animating { frame } }),
-            Err(e) => {
-                tracing::warn!(?e, "failed to tick transition, will retry on next render");
-                ManagedSurface::Pending(Surface { data, stage: Pending })
-            }
-        }
-    }
-}
-
-impl Surface<Ready> {
-    pub(super) fn configure(self, logical_size: (u32, u32)) -> ManagedSurface {
-        let mut data = self.data;
-        let (logical_width, logical_height) = logical_size;
-        if logical_width > 0 && logical_height > 0 && (logical_width != data.logical_width || logical_height != data.logical_height) {
-            tracing::info!(old_width = data.logical_width, old_height = data.logical_height, logical_width, logical_height, "compositor requested new surface size, resizing");
-            (data.logical_width, data.logical_height) = (logical_width, logical_height);
-            ManagedSurface::Pending(Surface { data, stage: Pending })
-        } else {
-            ManagedSurface::Ready(Surface { data, stage: Ready })
-        }
-    }
-}
-
-impl ManagedSurface {
     pub(super) fn is_wl_surface(&self, surface: &WlSurface) -> bool {
-        self.wl_surface() == surface
+        self.layer_surface.wl_surface() == surface
     }
 
     pub(super) fn is_layer_surface(&self, layer: &LayerSurface) -> bool {
-        self.wl_surface() == layer.wl_surface()
+        self.layer_surface.wl_surface() == layer.wl_surface()
     }
 
-    pub(super) fn is_output(&self, output: &WlOutput) -> bool {
-        self.output() == output
+    pub(super) fn is_wl_output(&self, output: &WlOutput) -> bool {
+        &self.wl_output == output
     }
 
-    fn wl_surface(&self) -> &WlSurface {
-        match self {
-            Self::Unconfigured(surface) => surface.data.layer.wl_surface(),
-            Self::Pending(surface) => surface.data.layer.wl_surface(),
-            Self::Animating(surface) => surface.data.layer.wl_surface(),
-            Self::Ready(surface) => surface.data.layer.wl_surface(),
-        }
-    }
-
-    pub(super) fn output(&self) -> &WlOutput {
-        match self {
-            Self::Unconfigured(surface) => &surface.data.output,
-            Self::Pending(surface) => &surface.data.output,
-            Self::Animating(surface) => &surface.data.output,
-            Self::Ready(surface) => &surface.data.output,
-        }
+    pub(super) fn wl_output(&self) -> &WlOutput {
+        &self.wl_output
     }
 
     pub(super) fn is_pending(&self) -> bool {
-        matches!(self, Self::Pending(_))
+        matches!(self.status, SurfaceStatus::Pending)
     }
 
-    pub(super) fn configure(self, logical_size: (u32, u32)) -> Self {
-        match self {
-            Self::Unconfigured(surface) => surface.configure(logical_size),
-            Self::Pending(mut surface) => {
-                let (logical_width, logical_height) = logical_size;
-                if logical_width > 0 && logical_height > 0 && (logical_width != surface.data.logical_width || logical_height != surface.data.logical_height) {
-                    tracing::info!(old_width = surface.data.logical_width, old_height = surface.data.logical_height, logical_width, logical_height, "compositor requested new surface size, resizing");
-                    (surface.data.logical_width, surface.data.logical_height) = (logical_width, logical_height);
-                }
-                Self::Pending(surface)
-            }
-            Self::Animating(surface) => {
-                let (logical_width, logical_height) = logical_size;
-                if logical_width > 0 && logical_height > 0 && (logical_width != surface.data.logical_width || logical_height != surface.data.logical_height) {
-                    let Surface { mut data, stage } = surface;
-                    drop(stage.frame);
-                    tracing::info!(old_width = data.logical_width, old_height = data.logical_height, logical_width, logical_height, "compositor requested new surface size, resizing");
-                    (data.logical_width, data.logical_height) = (logical_width, logical_height);
-                    Self::Pending(Surface { data, stage: Pending })
-                } else {
-                    Self::Animating(surface)
-                }
-            }
-            Self::Ready(surface) => surface.configure(logical_size),
+    pub(super) fn configure(&mut self, new_size: (u32, u32)) {
+        let (logical_width, logical_height) = new_size;
+        let (current_width, current_height) = self.logical_size;
+
+        if logical_width > 0 && logical_height > 0 && (logical_width != current_width || logical_height != current_height) {
+            tracing::info!(old_width = current_width, old_height = current_height, logical_width, logical_height, "compositor requested new surface size, resizing");
+            self.logical_size = new_size;
+            self.status = SurfaceStatus::Pending;
+        } else if matches!(self.status, SurfaceStatus::Unconfigured) {
+            self.status = SurfaceStatus::Pending;
         }
     }
 
-    pub(super) fn rescale(self, scale_factor: i32) -> Self {
-        let scale_factor: u32 = scale_factor.max(1).cast_unsigned();
-        match self {
-            Self::Unconfigured(mut surface) => {
-                if scale_factor == surface.data.scale_factor {
-                    return Self::Unconfigured(surface);
-                }
-                if let Err(e) = surface.data.layer.set_buffer_scale(scale_factor) {
-                    tracing::warn!(?e, "compositor does not support buffer scaling, keeping current resolution");
-                    return Self::Unconfigured(surface);
-                }
-                tracing::info!(old_scale = surface.data.scale_factor, scale_factor, "output scale changed, resizing");
-                surface.data.scale_factor = scale_factor;
-                Self::Pending(Surface { data: surface.data, stage: Pending })
-            }
-            Self::Pending(mut surface) => {
-                if scale_factor == surface.data.scale_factor {
-                    return Self::Pending(surface);
-                }
-                if let Err(e) = surface.data.layer.set_buffer_scale(scale_factor) {
-                    tracing::warn!(?e, "compositor does not support buffer scaling, keeping current resolution");
-                    return Self::Pending(surface);
-                }
-                tracing::info!(old_scale = surface.data.scale_factor, scale_factor, "output scale changed, resizing");
-                surface.data.scale_factor = scale_factor;
-                Self::Pending(surface)
-            }
-            Self::Animating(surface) => {
-                if scale_factor == surface.data.scale_factor {
-                    return Self::Animating(surface);
-                }
-                let Surface { mut data, stage } = surface;
-                if let Err(e) = data.layer.set_buffer_scale(scale_factor) {
-                    tracing::warn!(?e, "compositor does not support buffer scaling, keeping current resolution");
-                    return Self::Animating(Surface { data, stage: Animating { frame: stage.frame } });
-                }
-                drop(stage.frame);
-                tracing::info!(old_scale = data.scale_factor, scale_factor, "output scale changed, resizing");
-                data.scale_factor = scale_factor;
-                Self::Pending(Surface { data, stage: Pending })
-            }
-            Self::Ready(surface) => {
-                let mut data = surface.data;
-                if scale_factor == data.scale_factor {
-                    return Self::Ready(Surface { data, stage: Ready });
-                }
-                if let Err(e) = data.layer.set_buffer_scale(scale_factor) {
-                    tracing::warn!(?e, "compositor does not support buffer scaling, keeping current resolution");
-                    return Self::Ready(Surface { data, stage: Ready });
-                }
-                tracing::info!(old_scale = data.scale_factor, scale_factor, "output scale changed, resizing");
-                data.scale_factor = scale_factor;
-                Self::Pending(Surface { data, stage: Pending })
-            }
+    pub(super) fn rescale(&mut self, new_factor: i32) {
+        let buffer_scale: u32 = new_factor.max(1).cast_unsigned();
+        if buffer_scale == self.buffer_scale {
+            return;
         }
+
+        if let Err(e) = self.layer_surface.set_buffer_scale(buffer_scale) {
+            tracing::warn!(?e, "compositor does not support buffer scaling, keeping current resolution");
+            return;
+        }
+
+        tracing::info!(old_scale = self.buffer_scale, buffer_scale, "output scale changed, resizing");
+        self.buffer_scale = buffer_scale;
+        self.status = SurfaceStatus::Pending;
     }
 
-    pub(super) fn start_transition(self, image: &Image, config: &Config, shm: &Shm, queue_handle: &QueueHandle<State>) -> Self {
-        match self {
-            Self::Pending(surface) => surface.start_transition(image, config, shm, queue_handle),
-            other => other,
+    pub(super) fn start_transition(&mut self, image: &Image, config: &Config, shm: &Shm, qh: &QueueHandle<State>) {
+        if !matches!(self.status, SurfaceStatus::Pending) {
+            return;
         }
+
+        let (logical_width, logical_height) = self.logical_size;
+        let Some(buffer_width) = logical_width.checked_mul(self.buffer_scale) else {
+            tracing::warn!("surface dimensions too large");
+            return;
+        };
+
+        let Some(buffer_height) = logical_height.checked_mul(self.buffer_scale) else {
+            tracing::warn!("surface dimensions too large");
+            return;
+        };
+
+        let frame = match Frame::new(image, config, shm, buffer_width, buffer_height) {
+            Ok(frame) => frame,
+            Err(e) => {
+                tracing::warn!(?e, "failed to start transition for output");
+                return;
+            }
+        };
+
+        self.status = SurfaceStatus::Animating { frame };
+        self.advance_frame(qh);
     }
 
-    pub(super) fn advance_frame(self, queue_handle: &QueueHandle<State>) -> Self {
-        match self {
-            Self::Animating(surface) => surface.advance_frame(queue_handle),
-            other => other,
+    pub(super) fn advance_frame(&mut self, qh: &QueueHandle<State>) {
+        let mut frame = match std::mem::replace(&mut self.status, SurfaceStatus::Pending) {
+            SurfaceStatus::Animating { frame } => frame,
+            previous_status => {
+                self.status = previous_status;
+                return;
+            }
+        };
+
+        match frame.advance(&self.layer_surface, qh) {
+            Ok(true) => {
+                self.status = SurfaceStatus::Ready;
+            }
+
+            Ok(false) => {
+                self.status = SurfaceStatus::Animating { frame };
+            }
+
+            Err(e) => {
+                tracing::warn!(?e, "failed to tick transition, will retry on next render");
+                self.status = SurfaceStatus::Pending;
+            }
         }
     }
 }

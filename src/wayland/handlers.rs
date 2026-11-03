@@ -21,30 +21,30 @@ impl OutputHandler for State {
         &mut self.output_state
     }
 
-    fn new_output(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, _: WlOutput) {
-        self.ensure_surfaces(queue_handle);
+    fn new_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, _: WlOutput) {
+        self.ensure_output_surfaces(qh);
     }
 
-    fn update_output(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, _: WlOutput) {
-        self.ensure_surfaces(queue_handle);
+    fn update_output(&mut self, _: &Connection, qh: &QueueHandle<Self>, _: WlOutput) {
+        self.ensure_output_surfaces(qh);
     }
 
     fn output_destroyed(&mut self, _: &Connection, _: &QueueHandle<Self>, output: WlOutput) {
-        self.remove_output(&output);
+        self.remove_output_surface(&output);
     }
 }
 
 impl CompositorHandler for State {
-    fn scale_factor_changed(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, surface: &WlSurface, scale_factor: i32) {
-        self.apply_scale(surface, scale_factor, queue_handle);
+    fn scale_factor_changed(&mut self, _: &Connection, qh: &QueueHandle<Self>, surface: &WlSurface, new_factor: i32) {
+        self.rescale_surface(surface, new_factor, qh);
     }
 
-    fn transform_changed(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, surface: &WlSurface, _: Transform) {
-        self.apply_transform(surface, queue_handle);
+    fn transform_changed(&mut self, _: &Connection, qh: &QueueHandle<Self>, surface: &WlSurface, _: Transform) {
+        self.refresh_surface_size(surface, qh);
     }
 
-    fn frame(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, surface: &WlSurface, _: u32) {
-        self.advance_frame(surface, queue_handle);
+    fn frame(&mut self, _: &Connection, qh: &QueueHandle<Self>, surface: &WlSurface, _: u32) {
+        self.advance_surface_frame(surface, qh);
     }
 
     fn surface_enter(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlSurface, _: &WlOutput) {}
@@ -53,18 +53,18 @@ impl CompositorHandler for State {
 }
 
 impl LayerShellHandler for State {
-    fn closed(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, layer: &LayerSurface) {
-        self.handle_close(layer, queue_handle);
+    fn closed(&mut self, _: &Connection, qh: &QueueHandle<Self>, layer: &LayerSurface) {
+        self.drop_closed_surface(layer, qh);
     }
 
-    fn configure(&mut self, _: &Connection, queue_handle: &QueueHandle<Self>, layer: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {
-        self.apply_configure(layer, configure.new_size, queue_handle);
+    fn configure(&mut self, _: &Connection, qh: &QueueHandle<Self>, layer: &LayerSurface, configure: LayerSurfaceConfigure, _: u32) {
+        self.configure_surface(layer, configure.new_size, qh);
     }
 }
 
 impl ShmHandler for State {
     fn shm_state(&mut self) -> &mut Shm {
-        &mut self.shm
+        &mut self.shm_state
     }
 }
 

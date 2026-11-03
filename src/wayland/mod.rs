@@ -16,11 +16,12 @@ pub(crate) fn run(config: Config) -> Result<()> {
 
     let (global_list, mut event_queue) = wayland_client::globals::registry_queue_init(&connection).context("failed to initialise globals registry")?;
     let queue_handle = event_queue.handle();
-    let mut state = State::bind(&global_list, &queue_handle, config)?;
-    event_queue.roundtrip(&mut state).context("roundtrip failed")?;
-    state.ensure_surfaces(&queue_handle);
 
-    if state.is_empty() {
+    let mut state = State::new(&global_list, &queue_handle, config)?;
+    event_queue.roundtrip(&mut state).context("roundtrip failed")?;
+    state.ensure_output_surfaces(&queue_handle);
+
+    if !state.has_output_surfaces() {
         tracing::warn!("no surfaces were configured by the compositor yet, waiting for hotplug");
     }
 
