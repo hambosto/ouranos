@@ -54,8 +54,8 @@ impl Surface {
         let stride = w * 4;
         let mut pixel = [0.0_f32; 4];
         for (k, channel) in pixel.iter_mut().enumerate() {
-            let top = buf[y0 * stride + x0 * 4 + k] as f32 * gx + buf[y0 * stride + x1 * 4 + k] as f32 * fx;
-            let bottom = buf[y1 * stride + x0 * 4 + k] as f32 * gx + buf[y1 * stride + x1 * 4 + k] as f32 * fx;
+            let top = f32::from(buf[y0 * stride + x0 * 4 + k]) * gx + f32::from(buf[y0 * stride + x1 * 4 + k]) * fx;
+            let bottom = f32::from(buf[y1 * stride + x0 * 4 + k]) * gx + f32::from(buf[y1 * stride + x1 * 4 + k]) * fx;
             *channel = top * gy + bottom * fy;
         }
 
