@@ -20,9 +20,6 @@ pub(crate) struct Transition {
 
 impl Transition {
     pub(crate) fn new(config: &TransitionConfig, dimensions: (u32, u32), target: Vec<u8>) -> Self {
-        let expected = (u64::from(dimensions.0) * u64::from(dimensions.1) * 4) as usize;
-        assert_eq!(target.len(), expected, "target buffer size mismatch for transition dimensions");
-
         let duration = if config.duration.is_finite() && config.duration >= 0.0 { config.duration } else { 1.5 };
         let smoothness = if config.edge_smoothness.is_finite() { config.edge_smoothness.clamp(0.0, 1.0) } else { 0.3 };
 

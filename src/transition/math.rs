@@ -1,8 +1,5 @@
 pub(crate) fn progress(duration: f32, elapsed: f64) -> f32 {
-    if duration <= 0.0 {
-        return 1.0;
-    }
-    ease_in_out_cubic((elapsed / f64::from(duration)).clamp(0.0, 1.0) as f32)
+    ease_in_out_cubic((elapsed / f64::from(duration)) as f32)
 }
 
 fn ease_in_out_cubic(t: f32) -> f32 {

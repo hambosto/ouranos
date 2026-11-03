@@ -1,6 +1,6 @@
 use image::{GenericImageView, Rgba, RgbaImage};
 
-use crate::image::geometry::crop_origin;
+use super::geometry::crop_origin;
 
 pub(super) fn blank(width: u32, height: u32, fill_color: [u8; 4]) -> RgbaImage {
     RgbaImage::from_pixel(width, height, Rgba(fill_color))

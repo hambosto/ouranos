@@ -164,7 +164,7 @@ impl Effect {
                 surface.for_each_pixel(canvas, target, |u, v, px, _| {
                     let sampled = surface.sample(target, ((u - 0.5) / scale + 0.5) * max_x, ((v - 0.5) / scale + 0.5) * max_y);
                     for ((o, &a), &s) in px.iter_mut().zip(&from).zip(&sampled) {
-                        *o = (f32::from(a) * keep + s * progress).round().clamp(0.0, 255.0) as u8;
+                        *o = (f32::from(a) * keep + s * progress).round() as u8;
                     }
                 });
             }
@@ -184,21 +184,19 @@ impl Effect {
             Self::Pixel { cell_size, origin, feather, radius_max } => {
                 let size = (cell_size * 0.75).max(0.02);
                 let edge = progress * (1.0 + 2.0 * feather) - feather;
-                let denom = radius_max.max(0.001);
                 surface.blend(canvas, target, from, |u, v| {
                     let x = u * surface.aspect_ratio();
                     let cell_x = (x / size).floor();
                     let cell_y = (v / size).floor();
                     let raw = (cell_x * 12.9898 + cell_y * 78.233).sin() * 43_758.547;
                     let noise = raw - raw.floor();
-                    let dist_norm = dist(origin, (x, v)) / denom;
+                    let dist_norm = dist(origin, (x, v)) / radius_max;
                     let threshold = dist_norm * 0.65 + noise * 0.35;
                     smooth_edge(threshold, edge, feather)
                 });
             }
             Self::Diamond { cell_size, origin, feather, radius_max } => {
                 let size = (cell_size * 1.15).max(0.0345);
-                let denom = radius_max.max(0.001);
                 surface.blend(canvas, target, from, |u, v| {
                     let x = u * surface.aspect_ratio();
                     let cell_index_x = (x / size).floor();
@@ -208,15 +206,14 @@ impl Effect {
                     let in_cell_x = (x - cell_center_x).abs() / (size * 0.5);
                     let in_cell_y = (v - cell_center_y).abs() / (size * 0.5);
                     let diamond_metric = in_cell_x + in_cell_y;
-                    let delay = (dist(origin, (cell_center_x, cell_center_y)) / denom) * 0.4;
-                    let local = ((progress - delay) / (1.0 - delay).max(0.0001)).clamp(0.0, 1.0);
+                    let delay = (dist(origin, (cell_center_x, cell_center_y)) / radius_max) * 0.4;
+                    let local = ((progress - delay) / (1.0 - delay)).clamp(0.0, 1.0);
                     let radius = local * (2.0 + 2.0 * feather) - feather;
                     smooth_edge(diamond_metric, radius, feather)
                 });
             }
             Self::Golden { center, angle, feather, radius_max } => {
                 let edge = progress * (1.0 + 2.0 * feather) - feather;
-                let denom = radius_max.max(0.001);
                 surface.blend(canvas, target, from, |u, v| {
                     let x = u * surface.aspect_ratio();
                     let (dx, dy) = (x - center.0, v - center.1);
@@ -225,7 +222,7 @@ impl Effect {
                     let phase = angle + progress * TAU;
                     let diff = theta - phase;
                     let delta_theta = diff - (diff / TAU).floor() * TAU;
-                    let golden_dist = (distance / denom) * (-GOLDEN_SPIRAL_TIGHTNESS * delta_theta).exp();
+                    let golden_dist = (distance / radius_max) * (-GOLDEN_SPIRAL_TIGHTNESS * delta_theta).exp();
                     smooth_edge(golden_dist, edge, feather)
                 });
             }
