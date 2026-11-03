@@ -1,3 +1,4 @@
+mod frame;
 mod handlers;
 mod state;
 mod surface;
@@ -17,9 +18,9 @@ pub(crate) fn run(config: Config) -> Result<()> {
     let queue_handle = event_queue.handle();
     let mut state = State::bind(&global_list, &queue_handle, config)?;
     event_queue.roundtrip(&mut state).context("roundtrip failed")?;
-    state.create_surfaces(&queue_handle);
+    state.ensure_surfaces(&queue_handle);
 
-    if state.surfaces.is_empty() {
+    if state.is_empty() {
         tracing::warn!("no surfaces were configured by the compositor yet, waiting for hotplug");
     }
 

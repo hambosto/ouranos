@@ -2,24 +2,24 @@ use anyhow::{Context, Result};
 use smithay_client_toolkit::compositor::CompositorState;
 use smithay_client_toolkit::output::OutputState;
 use smithay_client_toolkit::registry::RegistryState;
-use smithay_client_toolkit::shell::WaylandSurface;
-use smithay_client_toolkit::shell::wlr_layer::LayerShell;
+use smithay_client_toolkit::shell::wlr_layer::{LayerShell, LayerSurface};
 use smithay_client_toolkit::shm::Shm;
 use wayland_client::QueueHandle;
 use wayland_client::globals::GlobalList;
+use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_surface::WlSurface;
 
-use super::surface::{Status, Surface};
+use super::surface::{ManagedSurface, Surface};
 use crate::config::Config;
 use crate::image::Image;
 
 pub(super) struct State {
     pub(super) registry_state: RegistryState,
     pub(super) output_state: OutputState,
-    compositor: CompositorState,
-    layer_shell: LayerShell,
+    pub(super) compositor: CompositorState,
+    pub(super) layer_shell: LayerShell,
     pub(super) shm: Shm,
-    pub(super) surfaces: Vec<Surface>,
+    surfaces: Vec<ManagedSurface>,
     config: Config,
 }
 
@@ -34,28 +34,92 @@ impl State {
         Ok(Self { registry_state, output_state, compositor, layer_shell, shm, surfaces: Vec::new(), config })
     }
 
-    pub(super) fn find_surface_mut(&mut self, wl: &WlSurface) -> Option<&mut Surface> {
-        self.surfaces.iter_mut().find(|s| s.layer_surface.wl_surface() == wl)
+    pub(super) fn is_empty(&self) -> bool {
+        self.surfaces.is_empty()
     }
 
-    pub(super) fn create_surfaces(&mut self, queue_handle: &QueueHandle<Self>) {
+    pub(super) fn ensure_surfaces(&mut self, queue_handle: &QueueHandle<Self>) {
         for output in self.output_state.outputs() {
-            if self.surfaces.iter().any(|s| s.output == output) {
+            if self.surfaces.iter().any(|surface| surface.is_output(&output)) {
                 continue;
             }
-
             let Some(info) = self.output_state.info(&output) else {
                 continue;
             };
-
-            if let Some(surface) = Surface::create(&self.compositor, &self.layer_shell, output, &info, queue_handle) {
-                self.surfaces.push(surface);
+            if let Some(surface) = Surface::new(&self.compositor, &self.layer_shell, output, &info, queue_handle) {
+                self.surfaces.push(ManagedSurface::Unconfigured(surface));
             }
         }
     }
 
-    pub(super) fn render(&mut self, queue_handle: &QueueHandle<Self>) {
-        if !self.surfaces.iter().any(|s| matches!(s.status, Status::Pending)) {
+    pub(super) fn remove_output(&mut self, output: &WlOutput) {
+        let before = self.surfaces.len();
+        self.surfaces.retain(|surface| !surface.is_output(output));
+        if self.surfaces.len() != before {
+            tracing::info!("wallpaper surface destroyed for disconnected output");
+        }
+    }
+
+    pub(super) fn apply_scale(&mut self, surface: &WlSurface, scale_factor: i32, queue_handle: &QueueHandle<Self>) {
+        let Some(index) = self.surfaces.iter().position(|candidate| candidate.is_wl_surface(surface)) else {
+            return;
+        };
+        let managed = self.surfaces.remove(index).rescale(scale_factor);
+        self.surfaces.insert(index, managed);
+        self.render_pending(queue_handle);
+    }
+
+    pub(super) fn apply_transform(&mut self, surface: &WlSurface, queue_handle: &QueueHandle<Self>) {
+        let logical_size = {
+            let Some(index) = self.surfaces.iter().position(|candidate| candidate.is_wl_surface(surface)) else {
+                return;
+            };
+            let output = self.surfaces[index].output().clone();
+            self.output_state.info(&output).and_then(|info| {
+                info.logical_size
+                    .filter(|(width, height)| *width > 0 && *height > 0)
+                    .map(|(width, height)| (width.cast_unsigned(), height.cast_unsigned()))
+            })
+        };
+        let Some(logical_size) = logical_size else {
+            return;
+        };
+        let Some(index) = self.surfaces.iter().position(|candidate| candidate.is_wl_surface(surface)) else {
+            return;
+        };
+        let managed = self.surfaces.remove(index).configure(logical_size);
+        self.surfaces.insert(index, managed);
+        self.render_pending(queue_handle);
+    }
+
+    pub(super) fn advance_frame(&mut self, surface: &WlSurface, queue_handle: &QueueHandle<Self>) {
+        let Some(index) = self.surfaces.iter().position(|candidate| candidate.is_wl_surface(surface)) else {
+            return;
+        };
+        let managed = self.surfaces.remove(index).advance_frame(queue_handle);
+        self.surfaces.insert(index, managed);
+    }
+
+    pub(super) fn apply_configure(&mut self, layer: &LayerSurface, logical_size: (u32, u32), queue_handle: &QueueHandle<Self>) {
+        let Some(index) = self.surfaces.iter().position(|candidate| candidate.is_layer_surface(layer)) else {
+            return;
+        };
+        let managed = self.surfaces.remove(index).configure(logical_size);
+        self.surfaces.insert(index, managed);
+        self.render_pending(queue_handle);
+    }
+
+    pub(super) fn handle_close(&mut self, layer: &LayerSurface, queue_handle: &QueueHandle<Self>) {
+        let before = self.surfaces.len();
+        self.surfaces.retain(|surface| !surface.is_layer_surface(layer));
+        if self.surfaces.len() != before {
+            tracing::info!("layer surface closed by compositor, releasing resources");
+            self.ensure_surfaces(queue_handle);
+        }
+    }
+
+    pub(super) fn render_pending(&mut self, queue_handle: &QueueHandle<Self>) {
+        if !self.surfaces.iter().any(ManagedSurface::is_pending) {
             return;
         }
 
@@ -73,10 +137,12 @@ impl State {
             }
         };
 
-        for surface in self.surfaces.iter_mut().filter(|s| matches!(s.status, Status::Pending)) {
-            surface
-                .start_transition(&image, &self.config, &self.shm, queue_handle)
-                .unwrap_or_else(|e| tracing::warn!(?e, "failed to start transition for output"));
+        for index in 0..self.surfaces.len() {
+            if !self.surfaces[index].is_pending() {
+                continue;
+            }
+            let managed = self.surfaces.remove(index).start_transition(&image, &self.config, &self.shm, queue_handle);
+            self.surfaces.insert(index, managed);
         }
     }
 }
