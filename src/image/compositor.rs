@@ -7,7 +7,7 @@ pub(super) fn blank(width: u32, height: u32, fill_color: [u8; 4]) -> RgbaImage {
 }
 
 pub(super) fn place_onto(canvas: &mut RgbaImage, src: &RgbaImage, x: i64, y: i64) {
-    image::imageops::overlay(canvas, src, x, y);
+    image::imageops::replace(canvas, src, x, y);
 }
 
 pub(super) fn centered_crop(src: &RgbaImage, width: u32, height: u32) -> RgbaImage {

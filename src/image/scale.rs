@@ -14,12 +14,12 @@ impl Scale {
     }
 
     pub(super) fn scale_exact(&mut self, src: &RgbaImage, width: u32, height: u32) -> Result<RgbaImage> {
-        let options = ResizeOptions::new().resize_alg(resize_alg(self.filter));
+        let options = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(self.filter));
         self.run(src, width, height, &options)
     }
 
     pub(super) fn scale_to_fill(&mut self, src: &RgbaImage, width: u32, height: u32, centering: (f64, f64)) -> Result<RgbaImage> {
-        let options = ResizeOptions::new().resize_alg(resize_alg(self.filter)).fit_into_destination(Some(centering));
+        let options = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(self.filter)).fit_into_destination(Some(centering));
         self.run(src, width, height, &options)
     }
 
@@ -32,8 +32,4 @@ impl Scale {
 
         RgbaImage::from_raw(width, height, dst.into_vec()).context("failed to construct RGBA image after resize")
     }
-}
-
-fn resize_alg(filter: FilterType) -> ResizeAlg {
-    if filter == FilterType::Box { ResizeAlg::Nearest } else { ResizeAlg::Convolution(filter) }
 }

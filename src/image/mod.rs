@@ -67,6 +67,10 @@ impl Image {
 
     fn render_fit(source: &Source, width: u32, height: u32, fill_color: [u8; 4], filter: FilterType) -> Result<RgbaImage> {
         let (src_w, src_h) = source.dimensions();
+        if src_w == width || src_h == height {
+            return Ok(Self::render_no(source, width, height, fill_color));
+        }
+
         let (scaled_w, scaled_h) = fit_dimensions(src_w, src_h, width, height);
 
         let mut scale = Scale::new(filter);

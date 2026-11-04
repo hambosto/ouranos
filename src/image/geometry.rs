@@ -1,7 +1,14 @@
 pub(super) fn fit_dimensions(src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> (u32, u32) {
-    let scale = (f64::from(dst_w) / f64::from(src_w)).min(f64::from(dst_h) / f64::from(src_h));
-    let width = (f64::from(src_w) * scale).round() as u32;
-    let height = (f64::from(src_h) * scale).round() as u32;
+    let ratio = dst_w as f32 / dst_h as f32;
+    let img_r = src_w as f32 / src_h as f32;
+
+    let (width, height) = if ratio > img_r {
+        let scale = dst_h as f32 / src_h as f32;
+        ((src_w as f32 * scale) as u32, dst_h)
+    } else {
+        let scale = dst_w as f32 / src_w as f32;
+        (dst_w, (src_h as f32 * scale) as u32)
+    };
 
     (width.max(1), height.max(1))
 }
