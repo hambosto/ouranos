@@ -11,8 +11,8 @@ pub(super) struct Source {
 
 impl Source {
     pub(super) fn load(path: &Path) -> Result<Self> {
-        let file = File::open(path).context("failed to open image")?;
-        let reader = ImageReader::new(BufReader::new(file)).with_guessed_format().context("failed to detect image format")?;
+        let source = File::open(path).context("failed to open image")?;
+        let reader = ImageReader::new(BufReader::new(source)).with_guessed_format().context("failed to detect image format")?;
 
         let mut decoder = reader.into_decoder().context("failed to create decoder")?;
         let orientation = decoder.orientation().context("failed to read orientation")?;

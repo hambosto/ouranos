@@ -55,9 +55,10 @@ impl State {
     }
 
     pub(super) fn remove_output_surface(&mut self, output: &WlOutput) {
+        let before = self.output_surfaces.len();
         self.output_surfaces.retain(|surface| !surface.is_wl_output(output));
 
-        if self.output_surfaces.len() != self.output_surfaces.len() {
+        if self.output_surfaces.len() != before {
             tracing::info!("wallpaper surface destroyed for disconnected output");
         }
     }
@@ -115,9 +116,10 @@ impl State {
     }
 
     pub(super) fn drop_closed_surface(&mut self, layer: &LayerSurface, qh: &QueueHandle<Self>) {
+        let before = self.output_surfaces.len();
         self.output_surfaces.retain(|surface| !surface.is_layer_surface(layer));
 
-        if self.output_surfaces.len() != self.output_surfaces.len() {
+        if self.output_surfaces.len() != before {
             tracing::info!("layer surface closed by compositor, releasing resources");
             self.ensure_output_surfaces(qh);
         }

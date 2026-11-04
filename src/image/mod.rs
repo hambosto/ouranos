@@ -6,18 +6,16 @@ use image::RgbaImage;
 
 use super::image::compositor::{blank, centered_crop, place_onto};
 use super::image::geometry::{center_offset, fit_dimensions};
-use super::image::pixel::{copy_to_shm_bytes, to_shm_bytes};
+use super::image::pixel::to_shm_bytes;
 use super::image::scale::Scale;
 use super::image::source::Source;
-use super::image::target::Target;
-use crate::config::{CropGravity, ResizeConfig};
+use crate::config::{CropGravity, ResizeConfig, ResizeStrategy};
 
 mod compositor;
 mod geometry;
 mod pixel;
 mod scale;
 mod source;
-mod target;
 
 pub(crate) struct Image {
     source: Source,
@@ -33,53 +31,56 @@ impl Image {
     }
 
     pub(crate) fn render(&self, width: u32, height: u32, resize: &ResizeConfig) -> Result<Vec<u8>> {
-        let target = Target::new(width, height)?;
+        if width == 0 || height == 0 {
+            anyhow::bail!("render target dimensions must be non-zero");
+        }
 
-        if self.source.dimensions() == target.dimensions() {
-            return Ok(copy_to_shm_bytes(self.source.as_rgba()));
+        if self.source.dimensions() == (width, height) {
+            // Source must be kept for other outputs, so this one copy is the floor.
+            return Ok(to_shm_bytes(self.source.as_rgba().clone()));
         }
 
         let rendered = match resize.strategy {
-            crate::config::ResizeStrategy::No => Self::render_no(&self.source, &target, resize.fill_color),
-            crate::config::ResizeStrategy::Crop => Self::render_crop(&self.source, &target, resize.crop_gravity, resize.filter.into())?,
-            crate::config::ResizeStrategy::Fit => Self::render_fit(&self.source, &target, resize.fill_color, resize.filter.into())?,
-            crate::config::ResizeStrategy::Stretch => Self::render_stretch(&self.source, &target, resize.filter.into())?,
+            ResizeStrategy::No => Self::render_no(&self.source, width, height, resize.fill_color),
+            ResizeStrategy::Crop => Self::render_crop(&self.source, width, height, resize.crop_gravity, resize.filter.into())?,
+            ResizeStrategy::Fit => Self::render_fit(&self.source, width, height, resize.fill_color, resize.filter.into())?,
+            ResizeStrategy::Stretch => Self::render_stretch(&self.source, width, height, resize.filter.into())?,
         };
 
         Ok(to_shm_bytes(rendered))
     }
 
-    fn render_no(source: &Source, target: &Target, fill_color: [u8; 4]) -> RgbaImage {
-        let cropped = centered_crop(source.as_rgba(), target.width(), target.height());
-        let (offset_x, offset_y) = center_offset(target.width(), target.height(), cropped.width(), cropped.height());
+    fn render_no(source: &Source, width: u32, height: u32, fill_color: [u8; 4]) -> RgbaImage {
+        let cropped = centered_crop(source.as_rgba(), width, height);
+        let (offset_x, offset_y) = center_offset(width, height, cropped.width(), cropped.height());
 
-        let mut canvas = blank(target.width(), target.height(), fill_color);
+        let mut canvas = blank(width, height, fill_color);
         place_onto(&mut canvas, &cropped, offset_x, offset_y);
 
         canvas
     }
 
-    fn render_crop(source: &Source, target: &Target, gravity: CropGravity, filter: FilterType) -> Result<RgbaImage> {
+    fn render_crop(source: &Source, width: u32, height: u32, gravity: CropGravity, filter: FilterType) -> Result<RgbaImage> {
         let mut scaler = Scale::new(filter);
-        scaler.scale_to_fill(source.as_rgba(), target.width(), target.height(), gravity.as_centering())
+        scaler.scale_to_fill(source.as_rgba(), width, height, gravity.as_centering())
     }
 
-    fn render_fit(source: &Source, target: &Target, fill_color: [u8; 4], filter: FilterType) -> Result<RgbaImage> {
+    fn render_fit(source: &Source, width: u32, height: u32, fill_color: [u8; 4], filter: FilterType) -> Result<RgbaImage> {
         let (src_w, src_h) = source.dimensions();
-        let (scaled_w, scaled_h) = fit_dimensions(src_w, src_h, target.width(), target.height());
+        let (scaled_w, scaled_h) = fit_dimensions(src_w, src_h, width, height);
 
         let mut scale = Scale::new(filter);
         let scaled = scale.scale_exact(source.as_rgba(), scaled_w, scaled_h)?;
 
-        let (offset_x, offset_y) = center_offset(target.width(), target.height(), scaled_w, scaled_h);
-        let mut canvas = blank(target.width(), target.height(), fill_color);
+        let (offset_x, offset_y) = center_offset(width, height, scaled_w, scaled_h);
+        let mut canvas = blank(width, height, fill_color);
         place_onto(&mut canvas, &scaled, offset_x, offset_y);
 
         Ok(canvas)
     }
 
-    fn render_stretch(source: &Source, target: &Target, filter: FilterType) -> Result<RgbaImage> {
+    fn render_stretch(source: &Source, width: u32, height: u32, filter: FilterType) -> Result<RgbaImage> {
         let mut scale = Scale::new(filter);
-        scale.scale_exact(source.as_rgba(), target.width(), target.height())
+        scale.scale_exact(source.as_rgba(), width, height)
     }
 }

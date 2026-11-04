@@ -6,7 +6,6 @@ use crate::config::TransitionType;
 
 const GOLDEN_SPIRAL_TIGHTNESS: f32 = 0.306_349;
 
-#[derive(Clone, Copy)]
 pub(crate) enum Effect {
     Snap,
     Fade,
